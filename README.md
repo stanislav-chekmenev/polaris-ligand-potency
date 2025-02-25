@@ -1,1 +1,1 @@
-# polaris-ligand-potency
+# Potency predictions for Polaris ASAP challenge
