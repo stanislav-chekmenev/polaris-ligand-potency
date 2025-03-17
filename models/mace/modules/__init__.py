@@ -1,4 +1,5 @@
-# The code is taken from geometric-dojo repository (https://github.com/chaitjo/geometric-gnn-dojo/tree/main)
+# The code is taken from geometric-dojo repository (https://github.com/chaitjo/geometric-gnn-dojo/tree/main) and reduced
+# to the minimum number of the relevant parts for the current application.
 
 
 ###########################################################################################
@@ -15,30 +16,9 @@ from typing import Callable, Dict, Optional, Type
 import torch
 
 from .blocks import (
-    AgnosticNonlinearInteractionBlock,
-    AgnosticResidualNonlinearInteractionBlock,
-    AtomicEnergiesBlock,
     EquivariantProductBasisBlock,
-    InteractionBlock,
-    LinearNodeEmbeddingBlock,
-    LinearReadoutBlock,
-    NonLinearReadoutBlock,
     RadialEmbeddingBlock,
-    RealAgnosticInteractionBlock,
-    RealAgnosticResidualInteractionBlock,
-    ResidualElementDependentInteractionBlock,
-    ScaleShiftBlock,
 )
-from .radial import BesselBasis, PolynomialCutoff
-from .symmetric_contraction import SymmetricContraction
-
-interaction_classes: Dict[str, Type[InteractionBlock]] = {
-    "AgnosticNonlinearInteractionBlock": AgnosticNonlinearInteractionBlock,
-    "ResidualElementDependentInteractionBlock": ResidualElementDependentInteractionBlock,
-    "AgnosticResidualNonlinearInteractionBlock": AgnosticResidualNonlinearInteractionBlock,
-    "RealAgnosticResidualInteractionBlock": RealAgnosticResidualInteractionBlock,
-    "RealAgnosticInteractionBlock": RealAgnosticInteractionBlock,
-}
 
 gate_dict: Dict[str, Optional[Callable]] = {
     "abs": torch.abs,
@@ -48,24 +28,6 @@ gate_dict: Dict[str, Optional[Callable]] = {
 }
 
 __all__ = [
-    "AtomicEnergiesBlock",
     "RadialEmbeddingBlock",
-    "LinearNodeEmbeddingBlock",
-    "LinearReadoutBlock",
     "EquivariantProductBasisBlock",
-    "ScaleShiftBlock",
-    "InteractionBlock",
-    "NonLinearReadoutBlock",
-    "PolynomialCutoff",
-    "BesselBasis",
-    "ScaleShiftMACE",
-    "BOTNet",
-    "ScaleShiftBOTNet",
-    "EnergyForcesLoss",
-    "WeightedEnergyForcesLoss",
-    "WeightedForcesLoss",
-    "SymmetricContraction",
-    "interaction_classes",
-    "compute_mean_std_atomic_inter_energy",
-    "compute_avg_num_neighbors",
 ]

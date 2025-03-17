@@ -52,11 +52,11 @@ class TensorProductConvLayer(torch.nn.Module):
                 self.gate = e3nn.nn.Activation(out_irreps, acts=[torch.nn.functional.silu])
             else:
                 self.gate = e3nn.nn.Gate(
-                    irreps_scalars,
-                    act_scalars,  # scalar
-                    irreps_gates,
-                    act_gates,  # gates (scalars)
-                    irreps_gated,  # gated tensors
+                    irreps_scalars,  # scalar irreps
+                    act_scalars,  # activation for irreps_scalars
+                    irreps_gates,  # scalar irreps
+                    act_gates,  # activation for irreps_gates
+                    irreps_gated,  # irreps of the higher orders than scalars
                 )
                 # Output irreps for the tensor product must be updated
                 self.out_irreps = out_irreps = self.gate.irreps_in
