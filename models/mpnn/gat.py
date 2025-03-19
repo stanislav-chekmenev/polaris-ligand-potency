@@ -6,11 +6,16 @@ import config as cfg
 
 
 class GAT(torch.nn.Module):
-    def __init__(self, out_channels: int = 64, edge_dim=3):
+    def __init__(self, out_channels: int = 64, edge_dim: int = cfg.EDGE_DIM):
+        """
+        Args:
+            out_channels (int): The number of output/hidden channels to update node features.
+            edge_dim (int): The dimension of edge features.
+        """
         super().__init__()
 
-        self.gat_conv1 = GATConv(in_channels=-1, out_channels=out_channels, edge_dim=cfg.EDGE_DIM)
-        self.gat_conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, edge_dim=cfg.EDGE_DIM)
+        self.gat_conv1 = GATConv(in_channels=-1, out_channels=out_channels, edge_dim=edge_dim)
+        self.gat_conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, edge_dim=edge_dim)
         self.node_aggregation = global_add_pool
 
     def forward(self, data):
