@@ -36,6 +36,7 @@ Check [this](https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dat
         my_var = cfg.MY_VAR
         ```
         Check `models/mpnn/gat.py` to see how I do it.
+    - data.edge_attr - a torch tensor of edge features of shape (num_edges, F_e). We get it with Graphium.
     - data.y - a torch tensor of our targets.
 
 **NB! Make sure the tensors are of the proper data.type like `torch.float`. All the shapes above are given for 1 graph, so 1 SMILES representation. We will process a list of them and save them as a list of PyG `Data` objects, which represent our graphs with the attributes listed above.**
@@ -47,6 +48,7 @@ Check [this](https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dat
         - data.x: dim = [Num_nodes, F_x]
         - data.u: dim = [1, 256 + F_dm]
         - data.pos: dim = [Num_nodes, Num_conformers, 3]
+        - data.edge_attr: dim = [Num_edges, F_e]
         - data.y: dim = [1,]
         We need to have this transform to concatenate already scaled features to the embeddings of the ChemBERTa, that's why this transform should be called after `Scale()`
     
