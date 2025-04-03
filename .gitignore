@@ -1,5 +1,7 @@
 # Project related stuff
 raw_data_package
+data/train/processed
+data/test/processed
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
