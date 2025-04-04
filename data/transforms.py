@@ -1,4 +1,7 @@
-from torch_geometric.transforms import BaseTransform, Compose, NormalizeScale
+import torch
+
+from torch_geometric.transforms import BaseTransform
+from torch_geometric.utils import remove_self_loops
 
 
 class CompleteGraph(BaseTransform):

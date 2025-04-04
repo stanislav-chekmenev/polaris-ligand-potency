@@ -1,26 +1,31 @@
-import os
-import sys
-sys.path.append('../')
-
+import datamol as dm
 import logging
+import numpy as np
+import os
+import pandas as pd
 import torch
-from torch_geometric.data import InMemoryDataset, Data
-from graphium.features import featurizer as gff
+
 from datamol.descriptors.compute import _DEFAULT_PROPERTIES_FN
+from graphium.features import featurizer as gff
 from torch_geometric.data import InMemoryDataset, Data
-from torch_geometric.loader import DataLoader
-from torch_geometric.transforms import BaseTransform, Compose, NormalizeScale
-from transforms import CompleteGraph, ConcatenateGlobal
+from torch_geometric.data import InMemoryDataset, Data
+from torch_geometric.transforms import Compose, NormalizeScale
+from transformers import pipeline
+from tqdm import tqdm
+
+import config as cfg
+from transforms import ConcatenateGlobal
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class MolDataset(InMemoryDataset):
     def __init__(
             self, 
             root: str, 
-            pre_transform: callable = Compose([NormalizeScale(), CompleteGraph(), ConcatenateGlobal()]), 
+            pre_transform: callable = Compose([NormalizeScale(), ConcatenateGlobal()]), 
             transform = None, 
             **kwargs
         ):
@@ -51,7 +56,7 @@ class MolDataset(InMemoryDataset):
         pipe = pipeline("feature-extraction", model="seyonec/ChemBERTa-zinc-base-v1", device="cpu")
         
         # Read the raw data
-        df_data = pd.read_csv(os.path.join(self.raw_dir, raw_files[0]))#, index_col=0, header=0)
+        df_data = pd.read_csv(os.path.join(self.raw_dir, raw_files[0]))
         
         # Create a list to store the data objects
         data_list = []
@@ -111,7 +116,6 @@ class MolDataset(InMemoryDataset):
             # Transform onehot to indices of possible atoms
             atoms = torch.where(atoms_onehot > 0)[1]
             
-
             # Generate conformers
             try:
                 mol_confs = dm.conformers.generate(mol, n_confs=cfg.NUM_CONFORMERS)
@@ -119,6 +123,7 @@ class MolDataset(InMemoryDataset):
                 pos_array = np.stack(list_xyz, axis=1)
             except Exception as e:
                 logger.warning(f"Conformer generation failed for {smile}: {e}")
+                logger.info("Setting all positions to zero.")
                 pos_array = np.zeros((x.shape[0], cfg.NUM_CONFORMERS, 3))
             pos = torch.tensor(pos_array, dtype=torch.float)
             
@@ -153,6 +158,10 @@ class MolDataset(InMemoryDataset):
         if self.pre_transform is not None:
             data_list = [self.pre_transform(data) for data in data_list]
 
-
         #Save the processed data
         self.save(data_list, self.processed_paths[0])
+
+
+if __name__ == "__main__":
+    dataset = MolDataset(root=cfg.TRAIN_DIR)
+    dataset = MolDataset(root=cfg.TEST_DIR)
