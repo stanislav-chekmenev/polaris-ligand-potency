@@ -1,9 +1,12 @@
-from typing import Optional
-
+import e3nn
 import torch
+
 from torch.nn import functional as F
 from torch_geometric.nn import global_add_pool, global_mean_pool
-import e3nn
+from torch_geometric.data import Batch
+from typing import Optional
+
+import config as cfg
 
 from .modules.irreps_tools import reshape_irreps
 from .modules.blocks import (
@@ -36,6 +39,7 @@ class MACEModel(torch.nn.Module):
         batch_norm: bool = True,
         residual: bool = True,
         equivariant_pred: bool = False,
+        as_featurizer: bool = True
     ):
         """
         Parameters:
@@ -55,6 +59,7 @@ class MACEModel(torch.nn.Module):
         - batch_norm (bool): Whether to use batch normalization (default: True)
         - residual (bool): Whether to use residual connections (default: True)
         - equivariant_pred (bool): Whether it is an equivariant prediction task (default: False)
+        - as_featurizer (bool): Whether to use the model as a featurizer (default: True)
 
         Note:
         - If `hidden_irreps` is None, the irreps for the intermediate features are computed
@@ -73,6 +78,7 @@ class MACEModel(torch.nn.Module):
         self.batch_norm = batch_norm
         self.hidden_irreps = hidden_irreps
         self.equivariant_pred = equivariant_pred
+        self.as_featurizer = as_featurizer
 
         # Edge embedding
         self.radial_embedding = RadialEmbeddingBlock(
@@ -177,6 +183,13 @@ class MACEModel(torch.nn.Module):
             # Update node features
             sc = F.pad(h, (0, h_update.shape[-1] - h.shape[-1]))
             h = prod(reshape(h_update), sc, None)
+
+        if self.as_featurizer:
+            # Return only the node scalar features for featurization in the invariant prediction task
+            h = h[:, : self.emb_dim]
+            # Create a new batch attribute, which is the MACE features
+            batch.h_mace = h
+            return batch
 
         out = self.pool(h, batch.batch)  # (n, d) -> (batch_size, d)
 
