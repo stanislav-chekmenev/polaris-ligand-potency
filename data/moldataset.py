@@ -14,7 +14,7 @@ from transformers import pipeline
 from tqdm import tqdm
 
 import config as cfg
-from transforms import ConcatenateGlobal
+from data.transforms import ConcatenateGlobal
 
 
 logging.basicConfig(level=logging.INFO)
@@ -123,9 +123,9 @@ class MolDataset(InMemoryDataset):
                 pos_array = np.stack(list_xyz, axis=1)
             except Exception as e:
                 logger.warning(f"Conformer generation failed for {smile}: {e}")
-                logger.info("Setting all positions to zero.")
-                pos_array = np.zeros((x.shape[0], cfg.NUM_CONFORMERS, 3))
-            pos = torch.tensor(pos_array, dtype=torch.float)
+                logger.info("Setting all positions to None")
+                
+            pos = torch.tensor(pos_array, dtype=torch.float) if pos_array is not None else None
             
             # Additional edge features:"bond-type-onehot", "stereo",conformer-bond-length" (might cause problems with complex molecules)
             edge_dict = gff.get_mol_edge_features(mol, edge_features, mask_nan='warn')          

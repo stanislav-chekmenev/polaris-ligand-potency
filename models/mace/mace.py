@@ -185,8 +185,11 @@ class MACEModel(torch.nn.Module):
             h = prod(reshape(h_update), sc, None)
 
         if self.as_featurizer:
-            # Return the node features for featurization
-            return h
+            # Return only the node scalar features for featurization in the invariant prediction task
+            h = h[:, : self.emb_dim]
+            # Create a new batch attribute, which is the MACE features
+            batch.h_mace = h
+            return batch
 
         out = self.pool(h, batch.batch)  # (n, d) -> (batch_size, d)
 
