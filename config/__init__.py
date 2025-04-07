@@ -26,3 +26,8 @@ TEST_DIR = ROOT / "data" / "test"
 
 #### GAT CONFIG ####
 EDGE_DIM = 8
+
+#### FEATURE EMBEDDER ####
+IN_MOL_DIM = 790
+NODE_DIM = 24
+OUT_EMB_DIM = 64
