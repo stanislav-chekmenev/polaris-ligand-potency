@@ -22,11 +22,11 @@ PREDICTION_DIM = 2 # Do not change, since it's the number of possible properties
 # FEATURE EMBEDDER #
 IN_MOL_DIM = 790
 NODE_DIM = 24
-OUT_EMB_DIM = 64
+EMB_DIM = 64
 
 # ATTENTION
 NUM_HEADS = 4
-IN_ATTENTION_DIM = OUT_EMB_DIM
+IN_ATTENTION_DIM = EMB_DIM
 
 # MACE BARYCENTER 
 MACE_KWARGS = MACE_KWARGS = {
@@ -36,7 +36,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "max_ell": 2,
     "correlation": 3,
     "num_layers": 5,
-    "emb_dim": OUT_EMB_DIM,
+    "emb_dim": EMB_DIM,
     "hidden_irreps": None,
     "mlp_dim": 64,
     "in_dim": NUM_POSSIBLE_ATOMS,
@@ -51,7 +51,7 @@ MACE_KWARGS = MACE_KWARGS = {
 
 # GAT
 EDGE_DIM = 8
-IN_GAT_DIM = OUT_EMB_DIM
+IN_GAT_DIM = EMB_DIM
 GAT_NODE_AGGREGATION = global_add_pool
 
 # NODE FEATURE AGGREGATION

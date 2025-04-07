@@ -38,7 +38,7 @@ class MACEBaryModel(MACEModel):
         """
 
         # Sample N number of conformers
-        batch = self.sample_conformers(batch)
+        batch = self.sample_conformers(batch) 
 
         # Replicate the graphs for each conformer
         batch = self.replicate_graphs_for_conformers(batch)
@@ -106,9 +106,7 @@ class MACEBaryModel(MACEModel):
 
             # Convert the barycenter node features to a PyTorch tensor and move it to the same device as the input batch.
             h_bary = torch.tensor(h_bary, dtype=torch.float32).to(cfg.DEVICE)
-            barycenter = Data(
-                x=h_bary,
-            )
+            barycenter = Data(x=h_bary)
 
             # Append the barycenter to the list of barycenters
             barycenters.append(barycenter)

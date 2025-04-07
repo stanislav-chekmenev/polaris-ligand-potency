@@ -16,7 +16,7 @@ class FeatureEmbedder(torch.nn.Module):
     def __init__(
             self, input_mol_emb_dim=cfg.IN_MOL_DIM, 
             input_node_emb_dim=cfg.NODE_DIM,
-            out_emb_dim=cfg.OUT_EMB_DIM
+            out_emb_dim=cfg.EMB_DIM
         ):
         super(FeatureEmbedder, self).__init__()
         self.mlp_u_emb = MLP(
