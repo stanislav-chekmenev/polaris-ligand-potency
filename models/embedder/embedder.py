@@ -16,14 +16,14 @@ class FeatureEmbedder(torch.nn.Module):
     def __init__(
             self, input_mol_emb_dim=cfg.IN_MOL_DIM, 
             input_node_emb_dim=cfg.NODE_DIM,
-            out_emb_dim=cfg.OUT_EMB_DIM
+            out_emb_dim=cfg.EMB_DIM
         ):
         super(FeatureEmbedder, self).__init__()
         self.mlp_u_emb = MLP(
             in_channels=input_mol_emb_dim,
             hidden_channels=128,
             out_channels=out_emb_dim,
-            num_layers=3,
+            num_layers=1,
             act=torch.nn.SiLU(),
             norm='LayerNorm'
             )
@@ -32,7 +32,7 @@ class FeatureEmbedder(torch.nn.Module):
             in_channels=input_node_emb_dim,
             hidden_channels=128,
             out_channels=out_emb_dim,
-            num_layers=3,
+            num_layers=1,
             act=torch.nn.SiLU(),
             norm='LayerNorm'
             )
