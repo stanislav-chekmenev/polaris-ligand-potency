@@ -3,6 +3,8 @@ raw_data_package
 data/train/processed
 data/test/processed
 .vscode/
+models/trained_models/
+runs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

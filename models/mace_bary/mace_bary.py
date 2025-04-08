@@ -6,14 +6,12 @@ import torch
 from ot.gromov import fgw_barycenters
 from scipy.sparse.csgraph import shortest_path
 from torch_geometric.data import Data, Batch
-from torch_geometric.loader import DataLoader
 from torch_geometric.utils import to_dense_adj
 from typing import Tuple
 
 import config as cfg
 
 from models import MACEModel
-from data.moldataset import MolDataset
 
 
 logging.basicConfig(level=logging.INFO)
