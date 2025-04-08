@@ -2,7 +2,7 @@ import torch
 
 import config as cfg
 
-from attention.attention import SelfAttention
+from models.attention.attention import SelfAttention
 
 
 class TransformerBlock(torch.nn.Module):
@@ -21,7 +21,7 @@ class TransformerBlock(torch.nn.Module):
         self.layernorm = torch.nn.LayerNorm(cfg.IN_ATTENTION_DIM)
         self.act = torch.nn.SiLU()
 
-    def forward(self, x:torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_skip = x
         x = self.attention(x)
         x = self.layernorm(x)
