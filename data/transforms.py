@@ -1,7 +1,24 @@
 import torch
 
-from torch_geometric.transforms import BaseTransform
+from torch_geometric.data import Data
+from torch_geometric.transforms import BaseTransform, NormalizeScale
 from torch_geometric.utils import remove_self_loops
+
+
+class NormalizeScaleWithZeros(NormalizeScale):
+
+    def forward(self, data: Data) -> Data:
+        data = self.center(data)
+
+        # Check if all positions are zero
+        if torch.all(data.pos == 0):
+            return data
+
+        assert data.pos is not None
+        scale = (1.0 / data.pos.abs().max()) * 0.999999
+        data.pos = data.pos * scale
+
+        return data
 
 
 class CompleteGraph(BaseTransform):
@@ -9,8 +26,9 @@ class CompleteGraph(BaseTransform):
     This transform adds all pairwise edges into the edge index per data sample,
     then removes self loops, i.e. it builds a fully connected or complete graph
     """
+
     def __call__(self, data):
-        
+
         device = data.edge_index.device
 
         row = torch.arange(data.num_nodes, dtype=torch.long, device=device)
@@ -33,19 +51,19 @@ class CompleteGraph(BaseTransform):
         data.edge_index = edge_index
 
         return data
-    
-    
+
+
 class ConcatenateGlobal(BaseTransform):
     """_summary_
 
     Args:
         BaseTransform (_type_): _description_
     """
-    
+
     def __call__(self, data):
         u = torch.concatenate([data.u_chem, data.u_dm], dim=0).view(1, -1)
         del data.u_dm
         del data.u_chem
         data.u = u
-        
+
         return data

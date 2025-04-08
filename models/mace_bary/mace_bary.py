@@ -30,7 +30,7 @@ class MACEBaryModel(MACEModel):
         Forward pass of the MACE model with barycenter computation.
         This function computes the forward pass of the MACE model and
         additionally computes the barycenter of the node features.
-        
+
         Parameters:
             - batch: Batch of input data that has several molecules.
             - max_iter: Maximum number of iterations for barycenter computation.
@@ -38,13 +38,16 @@ class MACEBaryModel(MACEModel):
         """
 
         # Sample N number of conformers
-        batch = self.sample_conformers(batch) 
+        batch = self.sample_conformers(batch)
 
         # Replicate the graphs for each conformer
         batch = self.replicate_graphs_for_conformers(batch)
 
         # Run MACE on the batch of conformers for each molecule to get MACE features.
-        batch = super().forward(batch) 
+        batch = super().forward(batch)
+
+        # If MACE features are NaNs, set them to zeros
+        batch.h_mace = torch.nan_to_num(batch.h_mace, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Compute barycenters for each molecule in the batch
         barycenters = self.compute_barycenters(batch)
@@ -70,13 +73,13 @@ class MACEBaryModel(MACEModel):
             mask = torch.isin(batch.batch, idx)
 
             # Get the conformers for the current molecule
-            conformers = batch[i: i + cfg.NUM_CONFORMERS_SAMPLE]
+            conformers = batch[i : i + cfg.NUM_CONFORMERS_SAMPLE]
 
             # Get the MACE features for each node of the conformers and store them in a list of numpy arrays.
             h_mace = batch.h_mace[mask]
             num_nodes = conformers[0].num_nodes
             Ys = [
-                h_mace[i: i + num_nodes].detach().cpu().numpy() 
+                h_mace[i : i + num_nodes].detach().cpu().numpy()
                 for i in range(0, num_nodes * cfg.NUM_CONFORMERS_SAMPLE, num_nodes)
             ]
 
@@ -89,7 +92,7 @@ class MACEBaryModel(MACEModel):
 
             # Set the relative weights for each conformer. They show how much each conformer contributes to the barycenter.
             # The weights are set to be uniform for each conformer.
-            lambdas = [1. / cfg.NUM_CONFORMERS_SAMPLE for _ in range(cfg.NUM_CONFORMERS_SAMPLE)]
+            lambdas = [1.0 / cfg.NUM_CONFORMERS_SAMPLE for _ in range(cfg.NUM_CONFORMERS_SAMPLE)]
 
             # Set the size of the barycenter, i.e. the number of nodes in the barycenter graph.
             sizebary = len(Cs[0])
@@ -97,7 +100,7 @@ class MACEBaryModel(MACEModel):
             # Compute the barycenter of the conformers. We get the barycenter node features and discard other outputs,
             # which are the cost matrix and OT plans
             h_bary, _ = fgw_barycenters(
-                N=sizebary, 
+                N=sizebary,
                 Ys=Ys,
                 Cs=Cs,
                 ps=ps,
@@ -131,7 +134,7 @@ class MACEBaryModel(MACEModel):
                 new_data.pos = data.pos[:, i, :]
                 new_data_list.append(new_data)
         return Batch.from_data_list(new_data_list)
-    
+
     def sample_conformers(self, batch: Batch) -> Batch:
         """
         Randomly samples conformers from the batch.
@@ -139,32 +142,26 @@ class MACEBaryModel(MACEModel):
         The conformers are sampled without replacement.
         Args:
             batch (torch_geometric.data.Batch): The original batch of graphs.
-        Returns:    
+        Returns:
             torch_geometric.data.Batch: A new batch with sampled conformers.
         """
 
-        if batch.pos is not None:
-            # Sample conformers
-            conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
-            batch.pos = batch.pos[:, conformer_idx, :]
-            return batch
-        else:
-            # If no conformers are present, return the batch as is
-            raise ValueError("No conformers found in the batch. Please check the input data.")
-    
+        # Sample conformers
+        conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
+        batch.pos = batch.pos[:, conformer_idx, :]
+        return batch
+
     def compute_Cs(self, conformers) -> list:
         """
         Computes the cost matrices for each molecule in the batch, using their edge_index.
         The cost is the shortest path between the nodes in the graph.
         Args:
-            conformers (list): List of conformer graphs.       
+            conformers (list): List of conformer graphs.
         Returns:
             list: List of cost matrices for each conformer.
         """
-        
+
         # Compute the cost matrices for each molecule in the batch, using their edge_index.
         adj_matrices = [to_dense_adj(conformer.edge_index).squeeze() for conformer in conformers]
         Cs_list = [shortest_path(adj.detach().cpu().numpy()) for adj in adj_matrices]
         return Cs_list
-
-

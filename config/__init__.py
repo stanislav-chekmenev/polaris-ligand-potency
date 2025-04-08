@@ -1,4 +1,4 @@
-import torch 
+import torch
 import multiprocessing
 
 from pathlib import Path
@@ -16,8 +16,8 @@ BATCH_SIZE = 2
 NUM_WORKERS = multiprocessing.cpu_count() - 1
 
 # FEATURES
-NUM_POSSIBLE_ATOMS = 44 # Do not change, since it's the number of possible atoms given by Graphium
-PREDICTION_DIM = 2 # Do not change, since it's the number of possible properties to predict
+NUM_POSSIBLE_ATOMS = 44  # Do not change, since it's the number of possible atoms given by Graphium
+PREDICTION_DIM = 2  # Do not change, since it's the number of possible properties to predict
 
 # FEATURE EMBEDDER #
 IN_MOL_DIM = 790
@@ -28,7 +28,7 @@ EMB_DIM = 64
 NUM_HEADS = 4
 IN_ATTENTION_DIM = EMB_DIM
 
-# MACE BARYCENTER 
+# MACE BARYCENTER
 MACE_KWARGS = MACE_KWARGS = {
     "r_max": 10.0,
     "num_bessel": 8,
@@ -46,7 +46,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "batch_norm": True,
     "residual": True,
     "equivariant_pred": False,
-    "as_featurizer": True
+    "as_featurizer": True,
 }
 
 # GAT
