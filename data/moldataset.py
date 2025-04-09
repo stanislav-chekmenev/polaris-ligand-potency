@@ -53,11 +53,14 @@ class MolDataset(InMemoryDataset):
             data.u_dm = (data.u_dm - desc_mins) / (desc_maxs - desc_mins)
             data.u_dm = torch.nan_to_num(data.u_dm, nan=0.0, posinf=0.0, neginf=0.0)
 
-    def apply_scalers(self, data, scaler_x, scaler_y, scaler_u):
+    def apply_scalers(self, data, scaler_x, scaler_y, scaler_u, scaler_edge):
         # Apply the scalers to the data
         data.x = torch.tensor(scaler_x.transform(data.x), dtype=torch.float)
         data.y = torch.tensor(scaler_y.transform(data.y), dtype=torch.float)
         data.u = torch.tensor(scaler_u.transform(data.u), dtype=torch.float)
+        data.edge_attr[:, -1] = torch.tensor(
+            scaler_edge.transform(data.edge_attr[:, -1].view(-1, 1)), dtype=torch.float
+        ).view(-1)
         return data
 
     def process(self) -> None:
@@ -71,10 +74,6 @@ class MolDataset(InMemoryDataset):
 
         # Create a list to store the data objects
         data_list = []
-
-        # Init an array to hold the statistics of the molecular descriptors
-        desc_mins = torch.ones(len(_DEFAULT_PROPERTIES_FN), dtype=torch.float) * 10_000
-        desc_maxs = -torch.ones(len(_DEFAULT_PROPERTIES_FN), dtype=torch.float) * 10_000
 
         for idx in tqdm(range(len(df_data)), desc="Processing molecules", total=len(df_data)):
             dm.disable_rdkit_log()  # stop logging a lot of info for datamol methods calls
@@ -100,10 +99,6 @@ class MolDataset(InMemoryDataset):
             descriptors = dm.descriptors.compute_many_descriptors(mol)
             u = list(descriptors.values())
             u_dm = torch.tensor(u, dtype=torch.float)
-
-            # Update the statistics of the molecular descriptors
-            desc_maxs = torch.where(u_dm > desc_maxs, u_dm, desc_maxs)
-            desc_mins = torch.where(u_dm < desc_mins, u_dm, desc_mins)
 
             # Allowable atomic node and edge features
             atomic_features = [
@@ -190,36 +185,42 @@ class MolDataset(InMemoryDataset):
         if self.pre_transform is not None:
             data_list = [self.pre_transform(data) for data in data_list]
 
-        # Scaler features
+        # Scale features
         if "train" in self.raw_dir:
             # Initialize the scalers
             scaler_x = StandardScaler()
             scaler_y = StandardScaler()
             scaler_u = StandardScaler()
+            scaler_edge = StandardScaler()
 
             # Fit the scalers on the training data
             x = torch.cat([data.x for data in data_list], dim=0)
             y = torch.cat([data.y for data in data_list], dim=0)
             u = torch.cat([data.u for data in data_list], dim=0)
+            edge_attr = torch.cat([data.edge_attr[:, -1] for data in data_list], dim=0)
 
             scaler_x = scaler_x.fit(x)
             scaler_y = scaler_y.fit(y)
             scaler_u = scaler_u.fit(u)
+            scaler_edge = scaler_edge.fit(edge_attr.view(-1, 1))
 
             # Apply the scalers
-            data_list = [self.apply_scalers(data, scaler_x, scaler_y, scaler_u) for data in data_list]
+            data_list = [self.apply_scalers(data, scaler_x, scaler_y, scaler_u, scaler_edge) for data in data_list]
 
             # Save the scalers
-            scalers = [scaler_x, scaler_y, scaler_u]
+            scalers = {"scaler_x": scaler_x, "scaler_y": scaler_y, "scaler_u": scaler_u, "scaler_edge": scaler_edge}
             pickle.dump(scalers, open(self.scaler_path, "wb"))
 
         else:
             # Load the scalers
             scalers = pickle.load(open(self.scaler_path, "rb"))
-            scaler_x, scaler_y, scaler_u = scalers
+            scaler_x = scalers["scaler_x"]
+            scaler_y = scalers["scaler_y"]
+            scaler_u = scalers["scaler_u"]
+            scaler_edge = scalers["scaler_edge"]
 
             # Apply the scalers
-            data_list = [self.apply_scalers(data, scaler_x, scaler_y, scaler_u) for data in data_list]
+            data_list = [self.apply_scalers(data, scaler_x, scaler_y, scaler_u, scaler_edge) for data in data_list]
 
         # Save the processed data
         self.save(data_list, self.processed_paths[0])

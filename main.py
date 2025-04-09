@@ -40,7 +40,11 @@ def train(model, loader, optimizer, criterion, device):
         optimizer.zero_grad()
 
         # Forward pass
-        predictions = model(batch)
+        outputs = model(batch)
+        predictions = outputs["pred"]
+        h_mol = outputs["mol_emb"]
+        h_gat = outputs["gat_emb"]
+        h_mace = outputs["mace_emb"]
 
         # Mask NaN values in the target
         # [True, False] if batch size = 1, batch.y = [some_value, NaN]
@@ -52,10 +56,14 @@ def train(model, loader, optimizer, criterion, device):
         # Compute loss only on valid targets
         loss = criterion(masked_predictions, masked_targets)
         loss.backward()
+
+        # Clip gradients
+        torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.GRADIENT_CLIP)
+
         optimizer.step()
         total_loss += loss.item()
 
-    return total_loss / len(loader)
+    return total_loss / len(loader), h_mol, h_gat, h_mace
 
 
 def get_next_run_folder(base_dir="runs"):
@@ -85,8 +93,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
 
     # Initialize model, loss, and optimizer
-    # model = MolPredictor().to(device)
-    model = BaselineMLP().to(cfg.DEVICE)
+    model = MolPredictor().to(device)
     logger.info(f"Model has {count_parameters(model):,} trainable parameters.")
     logger.info(f"Model: {model}")
     criterion = MSELoss()
@@ -109,7 +116,7 @@ def main():
 
     for epoch in range(cfg.NUM_EPOCHS):
         logger.info(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}")
-        train_loss = train(model, train_loader, optimizer, criterion, device)
+        train_loss, h_mol, h_gat, h_mace = train(model, train_loader, optimizer, criterion, device)
 
         # Step the scheduler
         # scheduler.step()
@@ -139,6 +146,15 @@ def main():
                 # Log gradient norm
                 writer.add_scalar(f"gradient_norms/{name}", param.grad.norm(), epoch)
 
+        # Log embeddings
+        all_emb = torch.cat([h_mol, h_gat, h_mace], dim=0)
+
+        # Create labels
+        num_labels = h_mol.shape[0]
+        labels = ["Mol"] * num_labels + ["GAT"] * num_labels + ["MACE"] * num_labels
+
+        writer.add_embedding(all_emb, metadata=labels, tag="multi_embeddings", global_step=epoch)
+
         print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Train Loss: {train_loss:.4f}")
 
         # Early stopping logic
@@ -153,7 +169,7 @@ def main():
             break
 
     # Save the model
-    torch.save(model.state_dict(), "models/trained_models/baseline.pth")
+    torch.save(model.state_dict(), "models/trained_models/mol_predictor.pth")
     print("Model saved as mol_predictor.pth")
 
     # Close the TensorBoard writer
@@ -166,17 +182,15 @@ if __name__ == "__main__":
     import pickle
 
     scalers = pickle.load(open(cfg.SCALER_PATH, "rb"))
-    _, scaler_y, _ = scalers
+    scaler_y = scalers["scaler_y"]
 
     main()
 
     # Seed
     seed_everything()
     # Load the trained model
-    # model = MolPredictor().to(cfg.DEVICE)
-    model = BaselineMLP().to(cfg.DEVICE)
-    # model.load_state_dict(torch.load("models/trained_models/mol_predictor.pth"))
-    model.load_state_dict(torch.load("models/trained_models/baseline.pth"))
+    model = MolPredictor().to(cfg.DEVICE)
+    model.load_state_dict(torch.load("models/trained_models/mol_predictor.pth"))
     model.eval()
 
     train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:4]
@@ -191,7 +205,7 @@ if __name__ == "__main__":
         targets[key] = []
         for batch in tqdm(train_loader, desc=f"Evaluating {key}"):
             batch = batch.to(cfg.DEVICE)
-            pred = model(batch).cpu().detach().numpy()
+            pred = model(batch).cpu().detach().numpy()["pred"]
             pred = scaler_y.inverse_transform(pred)[:, num]
             predictions[key].extend(pred)
             y = scaler_y.inverse_transform(batch.y.cpu().detach().numpy())[:, num]

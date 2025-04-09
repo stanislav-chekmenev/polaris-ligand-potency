@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 
+from torch.utils.tensorboard import SummaryWriter
+
 import config as cfg
 
 from models import FeatureEmbedder, GAT, MACEBaryModel, TransformerBlock
@@ -23,13 +25,18 @@ class MolPredictor(torch.nn.Module):
         self.transformer = TransformerBlock()
         self.gat = GAT()
         self.aggr = aggr
-        self.lin_out = torch.nn.Linear(cfg.EMB_DIM * 4, cfg.PREDICTION_DIM)
+        self.lin_out = torch.nn.Sequential(
+            # torch.nn.Linear(cfg.EMB_DIM * 4, cfg.EMB_DIM),
+            torch.nn.Linear(cfg.EMB_DIM * 2, cfg.EMB_DIM),
+            torch.nn.SiLU(),
+            torch.nn.Linear(cfg.EMB_DIM, cfg.PREDICTION_DIM),
+        )
 
     def forward(self, batch):
         # Embed the features
         batch = self.feature_embedder(batch)
         h_mol = batch.u
-        del batch.u  # free up memory
+        # del batch.u  # free up memory
 
         # Get GAT features -> dim = [batch_size, out_emb_dim]
         h_gat = self.gat(batch)
@@ -38,6 +45,7 @@ class MolPredictor(torch.nn.Module):
         # and the barycenters of dim = [batch_size, out_emb_dim]
         batch, barycenters = self.mace_bary(batch)
 
+        """
         # Aggregate MACE 3D features accross all nodes in the batch.
         # [batch_size, num_nodes, out_emb_dim] -> [batch_size, out_emb_dim]
         batch.batch = self.rebatch(batch)
@@ -49,9 +57,13 @@ class MolPredictor(torch.nn.Module):
 
         # Apply the transformer block
         x = self.transformer(x).view(cfg.BATCH_SIZE, cfg.EMB_DIM * 4)
+        """
+        batch.batch = self.rebatch(batch)
+        h_mace = self.aggr(batch.h_mace, batch.batch)
+        x = torch.cat([h_mol, h_mace], dim=-1)
 
         # Apply the linear layer for predictions
-        return self.lin_out(x)
+        return {"pred": self.lin_out(x), "mol_emb": h_mol, "gat_emb": h_gat, "mace_emb": h_mace}
 
     def rebatch(self, batch):
         new_batch = batch.batch.clone()

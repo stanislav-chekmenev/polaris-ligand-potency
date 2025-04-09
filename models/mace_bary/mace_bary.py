@@ -77,7 +77,7 @@ class MACEBaryModel(MACEModel):
             h_mace = batch.h_mace[mask]
             num_nodes = conformers[0].num_nodes
             Ys = [
-                h_mace[i : i + num_nodes].detach().cpu().numpy()
+                h_mace[i : i + num_nodes].cpu().detach().numpy()
                 for i in range(0, num_nodes * cfg.NUM_CONFORMERS_SAMPLE, num_nodes)
             ]
 
@@ -161,5 +161,5 @@ class MACEBaryModel(MACEModel):
 
         # Compute the cost matrices for each molecule in the batch, using their edge_index.
         adj_matrices = [to_dense_adj(conformer.edge_index).squeeze() for conformer in conformers]
-        Cs_list = [shortest_path(adj.detach().cpu().numpy()) for adj in adj_matrices]
+        Cs_list = [shortest_path(adj.cpu().detach().numpy()) for adj in adj_matrices]
         return Cs_list

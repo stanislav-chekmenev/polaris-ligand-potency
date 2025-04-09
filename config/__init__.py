@@ -2,16 +2,17 @@ import torch
 import multiprocessing
 
 from pathlib import Path
-from torch_geometric.nn.pool import global_add_pool
+from torch_geometric.nn.pool import global_add_pool, global_mean_pool
 
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-NUM_EPOCHS = 30
+NUM_EPOCHS = 100
 LEARNING_RATE = 1e-3
-MAX_EARLY_STOP = 10
+MAX_EARLY_STOP = 50
 WEIGHT_DECAY = 1e-5
 WARMUP_STEPS = 50
-RUN_NAME = "baseline_LR_1e-3"
+RUN_NAME = "mp_embedder_mace_LR_1e-3_CLIP_5_mean_pool"
+GRADIENT_CLIP = 5.0
 
 
 # CONFORMERS
@@ -29,7 +30,7 @@ PREDICTION_DIM = 2  # Do not change, since it's the number of possible propertie
 # FEATURE EMBEDDER #
 IN_MOL_DIM = 790
 NODE_DIM = 18
-EMB_DIM = 128
+EMB_DIM = 64
 
 # ATTENTION
 NUM_HEADS = 4
@@ -45,7 +46,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "num_layers": 5,
     "emb_dim": EMB_DIM,
     "hidden_irreps": None,
-    "mlp_dim": 128,
+    "mlp_dim": 64,
     "in_dim": NUM_POSSIBLE_ATOMS,
     "out_dim": 1,
     "aggr": "sum",
@@ -59,10 +60,10 @@ MACE_KWARGS = MACE_KWARGS = {
 # GAT
 EDGE_DIM = 8
 IN_GAT_DIM = EMB_DIM
-GAT_NODE_AGGREGATION = global_add_pool
+GAT_NODE_AGGREGATION = global_mean_pool
 
 # NODE FEATURE AGGREGATION
-NODE_AGGREGATION = global_add_pool
+NODE_AGGREGATION = global_mean_pool
 
 
 #### DATA CONFIG ####
