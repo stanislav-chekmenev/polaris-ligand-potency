@@ -6,6 +6,13 @@ from torch_geometric.nn.pool import global_add_pool
 
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+NUM_EPOCHS = 30
+LEARNING_RATE = 1e-3
+MAX_EARLY_STOP = 10
+WEIGHT_DECAY = 1e-5
+WARMUP_STEPS = 50
+RUN_NAME = "baseline_LR_1e-3"
+
 
 # CONFORMERS
 NUM_CONFORMERS = 10
@@ -21,8 +28,8 @@ PREDICTION_DIM = 2  # Do not change, since it's the number of possible propertie
 
 # FEATURE EMBEDDER #
 IN_MOL_DIM = 790
-NODE_DIM = 24
-EMB_DIM = 64
+NODE_DIM = 18
+EMB_DIM = 128
 
 # ATTENTION
 NUM_HEADS = 4
@@ -38,7 +45,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "num_layers": 5,
     "emb_dim": EMB_DIM,
     "hidden_irreps": None,
-    "mlp_dim": 64,
+    "mlp_dim": 128,
     "in_dim": NUM_POSSIBLE_ATOMS,
     "out_dim": 1,
     "aggr": "sum",
@@ -62,3 +69,4 @@ NODE_AGGREGATION = global_add_pool
 ROOT = Path(__file__).parent.parent
 TRAIN_DIR = ROOT / "data" / "train"
 TEST_DIR = ROOT / "data" / "test"
+SCALER_PATH = ROOT / "data" / "train" / "processed" / "scalers.pkl"

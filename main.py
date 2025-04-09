@@ -1,21 +1,35 @@
 import os
 import logging
+import numpy as np
+import random
 import torch
 
 from torch_geometric.loader import DataLoader
 from torch.nn import MSELoss
 from torch.optim import Adam
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import config as cfg
 
-from models.mol_predictor import MolPredictor
+from models import MolPredictor, BaselineMLP
 from data.moldataset import MolDataset
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def seed_everything(seed=42):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
+    logger.info(f"Seeding everything with seed: {seed}")
 
 
 def train(model, loader, optimizer, criterion, device):
@@ -30,7 +44,7 @@ def train(model, loader, optimizer, criterion, device):
 
         # Mask NaN values in the target
         # [True, False] if batch size = 1, batch.y = [some_value, NaN]
-        batch.y = batch.y.view(-1, cfg.PREDICTION_DIM)
+        batch.y = batch.y
         mask = ~torch.isnan(batch.y)
         masked_predictions = predictions[mask]
         masked_targets = batch.y[mask]
@@ -55,35 +69,91 @@ def get_next_run_folder(base_dir="runs"):
     return os.path.join(base_dir, f"{next_number:03d}")
 
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
 def main():
+    # Seed
+    seed_everything()
+
     # Set device
     device = torch.device(cfg.DEVICE)
 
     # Load dataset
-    train_dataset = MolDataset(cfg.TRAIN_DIR)
+    train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:4]
     train_loader = DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
 
     # Initialize model, loss, and optimizer
-    model = MolPredictor().to(device)
+    # model = MolPredictor().to(device)
+    model = BaselineMLP().to(cfg.DEVICE)
+    logger.info(f"Model has {count_parameters(model):,} trainable parameters.")
+    logger.info(f"Model: {model}")
     criterion = MSELoss()
-    optimizer = Adam(model.parameters(), lr=1e-3)
+    optimizer = Adam(model.parameters(), lr=cfg.LEARNING_RATE, weight_decay=cfg.WEIGHT_DECAY)
+
+    # Define a linear learning rate scheduler
+    # def linear_lr_lambda(epoch):
+    #    return 1 - epoch / cfg.NUM_EPOCHS
+
+    # scheduler = LambdaLR(optimizer, lr_lambda=linear_lr_lambda)
 
     # Initialize TensorBoard writer
-    writer = SummaryWriter(log_dir=get_next_run_folder())
+    run_name = "runs/" + cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
+    logger.info(f"Logging to {run_name} directory")
+    writer = SummaryWriter(log_dir=run_name)
 
-    # Training loop
-    num_epochs = 5
-    for epoch in range(num_epochs):
-        logger.info(f"Epoch {epoch + 1}/{num_epochs}")
+    best_loss = float("inf")
+    early_stop_counter = 0
+    max_early_stop = cfg.MAX_EARLY_STOP
+
+    for epoch in range(cfg.NUM_EPOCHS):
+        logger.info(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}")
         train_loss = train(model, train_loader, optimizer, criterion, device)
+
+        # Step the scheduler
+        # scheduler.step()
+
+        # Adjust learning rate
+        # if epoch < cfg.WARMUP_STEPS:
+        #    lr = cfg.LEARNING_RATE * (epoch / cfg.WARMUP_STEPS)
+        # else:
+        #    lr = cfg.LEARNING_RATE
+
+        # if epoch < cfg.WARMUP_STEPS:
+        #    logger.info(f"Warmup phase. Learning rate: {lr:.6f}")
+        # else:
+        #    logger.info(f"Normal phase. learning rate: {lr:.6f}")
+
+        # for param_group in optimizer.param_groups:
+        #    param_group["lr"] = lr
 
         # Log epoch-level losses
         writer.add_scalar("Train Loss", train_loss, epoch)
 
-        print(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.4f}")
+        # Log gradients
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                # Log gradient distributions
+                writer.add_histogram(f"gradients/{name}", param.grad, epoch)
+                # Log gradient norm
+                writer.add_scalar(f"gradient_norms/{name}", param.grad.norm(), epoch)
+
+        print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Train Loss: {train_loss:.4f}")
+
+        # Early stopping logic
+        if train_loss < best_loss:
+            best_loss = train_loss
+            early_stop_counter = 0
+        else:
+            early_stop_counter += 1
+
+        if early_stop_counter >= max_early_stop:
+            print(f"Early stopping triggered. No improvement for {cfg.MAX_EARLY_STOP} epochs.")
+            break
 
     # Save the model
-    torch.save(model.state_dict(), "models/trained_models/mol_predictor.pth")
+    torch.save(model.state_dict(), "models/trained_models/baseline.pth")
     print("Model saved as mol_predictor.pth")
 
     # Close the TensorBoard writer
@@ -92,14 +162,24 @@ def main():
 
 if __name__ == "__main__":
     from evaluation import eval_potency
+    from pprint import pprint
+    import pickle
 
-    # main()
+    scalers = pickle.load(open(cfg.SCALER_PATH, "rb"))
+    _, scaler_y, _ = scalers
 
+    main()
+
+    # Seed
+    seed_everything()
     # Load the trained model
-    model = MolPredictor().to(cfg.DEVICE)
-    model.load_state_dict(torch.load("models/trained_models/mol_predictor.pth"))
+    # model = MolPredictor().to(cfg.DEVICE)
+    model = BaselineMLP().to(cfg.DEVICE)
+    # model.load_state_dict(torch.load("models/trained_models/mol_predictor.pth"))
+    model.load_state_dict(torch.load("models/trained_models/baseline.pth"))
+    model.eval()
 
-    train_dataset = MolDataset(cfg.TRAIN_DIR)
+    train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:4]
     train_loader = DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
 
     keys = {"pIC50 (SARS-CoV-2 Mpro)", "pIC50 (MERS-CoV Mpro)"}
@@ -111,9 +191,10 @@ if __name__ == "__main__":
         targets[key] = []
         for batch in tqdm(train_loader, desc=f"Evaluating {key}"):
             batch = batch.to(cfg.DEVICE)
-            pred = model(batch).cpu().detach().numpy()[num]
+            pred = model(batch).cpu().detach().numpy()
+            pred = scaler_y.inverse_transform(pred)[:, num]
             predictions[key].extend(pred)
-            y = batch.y.cpu().detach().numpy().reshape(-1, 2)[num]
+            y = scaler_y.inverse_transform(batch.y.cpu().detach().numpy())[:, num]
             targets[key].extend(y)
 
-    print(eval_potency(predictions, targets))
+    pprint(dict(eval_potency(predictions, targets)))
