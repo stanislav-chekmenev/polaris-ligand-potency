@@ -27,7 +27,7 @@ class MolPredictor(torch.nn.Module):
         self.aggr = aggr
         self.lin_out = torch.nn.Sequential(
             # torch.nn.Linear(cfg.EMB_DIM * 4, cfg.EMB_DIM),
-            torch.nn.Linear(cfg.EMB_DIM * 2, cfg.EMB_DIM),
+            torch.nn.Linear(cfg.EMB_DIM, cfg.EMB_DIM),
             torch.nn.SiLU(),
             torch.nn.Linear(cfg.EMB_DIM, cfg.PREDICTION_DIM),
         )
@@ -59,11 +59,12 @@ class MolPredictor(torch.nn.Module):
         x = self.transformer(x).view(cfg.BATCH_SIZE, cfg.EMB_DIM * 4)
         """
         batch.batch = self.rebatch(batch)
+        # TODO: do not average accross all conformers!
         h_mace = self.aggr(batch.h_mace, batch.batch)
-        x = torch.cat([h_mol, h_mace], dim=-1)
+        # x = torch.cat([h_mol, h_mace], dim=-1)
 
         # Apply the linear layer for predictions
-        return {"pred": self.lin_out(x), "mol_emb": h_mol, "gat_emb": h_gat, "mace_emb": h_mace}
+        return {"pred": self.lin_out(h_mace), "mol_emb": h_mol, "gat_emb": h_gat, "mace_emb": h_mace}
 
     def rebatch(self, batch):
         new_batch = batch.batch.clone()

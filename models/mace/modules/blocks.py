@@ -84,4 +84,4 @@ class EquivariantProductBasisBlock(torch.nn.Module):
         return out
 
 
-nonlinearities = {1: torch.nn.SiLU(), -1: torch.nn.Tanh()}
+# nonlinearities = {1: torch.nn.SiLU(), -1: torch.nn.Tanh()}

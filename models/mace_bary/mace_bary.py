@@ -146,6 +146,9 @@ class MACEBaryModel(MACEModel):
 
         # Sample conformers
         conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
+        if cfg.DEBUG:
+            conformer_idx = np.array([0])
+            logger.info(f"Conformer indices: {conformer_idx}")
         batch.pos = batch.pos[:, conformer_idx, :]
         return batch
 

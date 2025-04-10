@@ -87,15 +87,41 @@ def main():
 
     # Set device
     device = torch.device(cfg.DEVICE)
+    logger.info(f"Using device: {device}")
 
     # Load dataset
-    train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:4]
-    train_loader = DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
+    if cfg.DEBUG:
+        logger.info(f"Debug mode: Loading only {cfg.NUM_MOLECULES} molecules for training.")
+        NUM_MOLS = cfg.NUM_MOLECULES
+        SHUFFLE = False
+        BATCH_SIZE = 1
+    else:
+        logger.info(f"Loading the entire dataset for training.")
+        NUM_MOLS = None
+        SHUFFLE = True
+        BATCH_SIZE = cfg.BATCH_SIZE
+
+    train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:NUM_MOLS]
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=cfg.NUM_WORKERS)
+
+    # Print data
+    if cfg.DEBUG:
+        for batch in train_loader:
+            logger.info(f"Batch: {batch}")
+            logger.info(f"Batch targets: {batch.y}")
 
     # Initialize model, loss, and optimizer
-    model = MolPredictor().to(device)
+    if cfg.BASE:
+        logger.info("Using Baseline MLP model.")
+        model = BaselineMLP().to(device)
+    else:
+        logger.info("Using MolPredictor model.")
+        model = MolPredictor().to(device)
+
     logger.info(f"Model has {count_parameters(model):,} trainable parameters.")
     logger.info(f"Model: {model}")
+
+    # Define loss function and optimizer
     criterion = MSELoss()
     optimizer = Adam(model.parameters(), lr=cfg.LEARNING_RATE, weight_decay=cfg.WEIGHT_DECAY)
 
@@ -193,8 +219,14 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load("models/trained_models/mol_predictor.pth"))
     model.eval()
 
-    train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:4]
-    train_loader = DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
+    train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[: cfg.NUM_MOLECULES]
+    shuffle = True if not cfg.DEBUG else False
+    train_loader = DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=shuffle, num_workers=cfg.NUM_WORKERS)
+
+    if cfg.DEBUG:
+        for batch in train_loader:
+            logger.info(f"Batch: {batch}")
+            logger.info(f"Batch targets: {batch.y}")
 
     keys = {"pIC50 (SARS-CoV-2 Mpro)", "pIC50 (MERS-CoV Mpro)"}
     predictions = {}
@@ -205,7 +237,8 @@ if __name__ == "__main__":
         targets[key] = []
         for batch in tqdm(train_loader, desc=f"Evaluating {key}"):
             batch = batch.to(cfg.DEVICE)
-            pred = model(batch).cpu().detach().numpy()["pred"]
+            outputs = model(batch)
+            pred = outputs["pred"].cpu().detach().numpy()
             pred = scaler_y.inverse_transform(pred)[:, num]
             predictions[key].extend(pred)
             y = scaler_y.inverse_transform(batch.y.cpu().detach().numpy())[:, num]

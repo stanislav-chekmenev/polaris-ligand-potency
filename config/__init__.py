@@ -6,21 +6,28 @@ from torch_geometric.nn.pool import global_add_pool, global_mean_pool
 
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-NUM_EPOCHS = 100
+NUM_EPOCHS = 50
 LEARNING_RATE = 1e-3
 MAX_EARLY_STOP = 50
 WEIGHT_DECAY = 1e-5
 WARMUP_STEPS = 50
-RUN_NAME = "mp_embedder_mace_LR_1e-3_CLIP_5_mean_pool"
+RUN_NAME = None  # "mp_mace_LR_1e-3_CLIP_5_mean_pool_BS_1_CONF_1_no_sample"
 GRADIENT_CLIP = 5.0
 
+#### DEBUGGING CONFIG ####
+NUM_MOLECULES = 4
+DEBUG = True
+
+#### BASELINE CONFIG ####
+BASE = True
 
 # CONFORMERS
 NUM_CONFORMERS = 10
-NUM_CONFORMERS_SAMPLE = 3
+NUM_CONFORMERS_SAMPLE = 1
+NUM_THREADS = 8
 
 # DATA LOADING
-BATCH_SIZE = 2
+BATCH_SIZE = 1
 NUM_WORKERS = multiprocessing.cpu_count() - 1
 
 # FEATURES
@@ -50,7 +57,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "in_dim": NUM_POSSIBLE_ATOMS,
     "out_dim": 1,
     "aggr": "sum",
-    "pool": "sum",
+    "pool": "mean",
     "batch_norm": True,
     "residual": True,
     "equivariant_pred": False,

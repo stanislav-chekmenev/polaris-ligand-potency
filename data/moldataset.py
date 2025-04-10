@@ -141,7 +141,13 @@ class MolDataset(InMemoryDataset):
 
             # Generate conformers
             try:
-                mol_confs = dm.conformers.generate(mol, n_confs=cfg.NUM_CONFORMERS)
+                mol_confs = dm.conformers.generate(
+                    mol,
+                    n_confs=cfg.NUM_CONFORMERS,
+                    num_threads=cfg.NUM_THREADS,
+                    minimize_energy=True,
+                    energy_iterations=200,
+                )
                 list_xyz = [mol_confs.GetConformer(i).GetPositions() for i in range(cfg.NUM_CONFORMERS)]
                 pos_array = np.stack(list_xyz, axis=1)
             except Exception as e:
