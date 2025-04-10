@@ -199,7 +199,7 @@ def main():
     for epoch in range(cfg.NUM_EPOCHS):
         logger.info(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}")
         results_train = train(model, train_loader, optimizer, criterion, device)
-        results_val = not cfg.DEBUG and eval(model, val_loader, criterion, device)
+        results_val = not cfg.DEBUG and val(model, val_loader, criterion, device)
 
         # Step the scheduler
         # scheduler.step()
@@ -365,8 +365,9 @@ def evaluate():
     evaluation_results = dict(eval_potency(predictions, targets))
 
     # Log evaluation results to TensorBoard
+    sub_dir = "debug" if cfg.DEBUG else "final"
     run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
-    log_dir = os.path.join("runs", "evaluation", run_name)
+    log_dir = os.path.join("runs", "evaluation", sub_dir, run_name)
     writer = SummaryWriter(log_dir=log_dir)
 
     # Helper function to create a Markdown table
@@ -393,7 +394,7 @@ def evaluate():
 
 if __name__ == "__main__":
     # Train the model
-    # main()
+    main()
 
     # Evaluate the model
     evaluate()
