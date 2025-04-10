@@ -27,7 +27,7 @@ NUM_CONFORMERS_SAMPLE = 1
 NUM_THREADS = 8
 
 # DATA LOADING
-BATCH_SIZE = 1
+BATCH_SIZE = 2
 NUM_WORKERS = multiprocessing.cpu_count() - 1
 
 # FEATURES
@@ -76,5 +76,6 @@ NODE_AGGREGATION = global_mean_pool
 #### DATA CONFIG ####
 ROOT = Path(__file__).parent.parent
 TRAIN_DIR = ROOT / "data" / "train"
+VAL_DIR = ROOT / "data" / "val"
 TEST_DIR = ROOT / "data" / "test"
 SCALER_PATH = ROOT / "data" / "train" / "processed" / "scalers.pkl"

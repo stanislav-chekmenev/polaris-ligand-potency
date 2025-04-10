@@ -234,4 +234,5 @@ class MolDataset(InMemoryDataset):
 
 if __name__ == "__main__":
     dataset = MolDataset(root=cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)
+    dataset = MolDataset(root=cfg.VAL_DIR, scaler_path=cfg.SCALER_PATH)
     dataset = MolDataset(root=cfg.TEST_DIR, scaler_path=cfg.SCALER_PATH)

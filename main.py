@@ -142,7 +142,10 @@ def main():
 
     for epoch in range(cfg.NUM_EPOCHS):
         logger.info(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}")
-        train_loss, h_mol, h_gat, h_mace = train(model, train_loader, optimizer, criterion, device)
+        if cfg.BASE:
+            train_loss = train(model, train_loader, optimizer, criterion, device)
+        else:
+            train_loss, h_mol, h_gat, h_mace = train(model, train_loader, optimizer, criterion, device)
 
         # Step the scheduler
         # scheduler.step()

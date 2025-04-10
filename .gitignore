@@ -1,6 +1,7 @@
 # Project related stuff
 raw_data_package
 data/train/processed
+data/val/processed
 data/test/processed
 .vscode/
 models/trained_models/
