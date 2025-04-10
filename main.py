@@ -35,12 +35,22 @@ def seed_everything(seed=42):
     logger.info(f"Seeding everything with seed: {seed}")
 
 
-def train(model, loader, optimizer, criterion, device):
+def train(model, loader, optimizer, criterion, device, current_batch, warmup_batches):
     model.train()
     total_loss = 0
+
     for batch in tqdm(loader, total=len(loader), desc="Training"):
         batch = batch.to(device)
         optimizer.zero_grad()
+
+        # Adjust learning rate during warm-up
+        if current_batch <= warmup_batches:
+            lr = cfg.LEARNING_RATE * (current_batch / warmup_batches)
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr
+
+        # Log the learning rate
+        current_batch += 1
 
         # Forward pass
         if cfg.BASE:
@@ -53,8 +63,6 @@ def train(model, loader, optimizer, criterion, device):
             h_mace = outputs["mace_emb"]
 
         # Mask NaN values in the target
-        # [True, False] if batch size = 1, batch.y = [some_value, NaN]
-        batch.y = batch.y
         mask = ~torch.isnan(batch.y)
         masked_predictions = predictions[mask]
         masked_targets = batch.y[mask]
@@ -74,6 +82,7 @@ def train(model, loader, optimizer, criterion, device):
         "h_mol": h_mol if not cfg.BASE else None,
         "h_gat": h_gat if not cfg.BASE else None,
         "h_mace": h_mace if not cfg.BASE else None,
+        "current_batch": current_batch,
     }
 
     return result
@@ -119,16 +128,23 @@ def val(model, loader, criterion, device):
 def get_next_run_folder(base_dir="runs"):
     """
     Creates the next folder name with consecutive numbers in the given base directory.
-    Example: runs/001, runs/002, etc.
+    Example: 001, 002, etc.
     """
     os.makedirs(base_dir, exist_ok=True)
     existing = [name for name in os.listdir(base_dir) if name.isdigit()]
     next_number = max([int(name) for name in existing], default=0) + 1
-    return os.path.join(base_dir, f"{next_number:03d}")
+    return f"{next_number:03d}"
 
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def get_model_name():
+    full_model_name = "mol_predictor" if not cfg.MODEL_NAME else cfg.MODEL_NAME
+    full_model_name += ".pth"
+    model_name = "baseline_mlp.pth" if cfg.BASE else full_model_name
+    return model_name
 
 
 def main():
@@ -158,12 +174,6 @@ def main():
         val_dataset = MolDataset(cfg.VAL_DIR, scaler_path=cfg.SCALER_PATH)
         val_loader = DataLoader(val_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
 
-    # Print data
-    if cfg.DEBUG:
-        for batch in train_loader:
-            logger.info(f"Batch: {batch}")
-            logger.info(f"Batch targets: {batch.y}")
-
     # Initialize model, loss, and optimizer
     if cfg.BASE:
         logger.info("Using Baseline MLP model.")
@@ -179,11 +189,18 @@ def main():
     criterion = MSELoss()
     optimizer = Adam(model.parameters(), lr=cfg.LEARNING_RATE, weight_decay=cfg.WEIGHT_DECAY)
 
-    # Define a linear learning rate scheduler
-    # def linear_lr_lambda(epoch):
-    #    return 1 - epoch / cfg.NUM_EPOCHS
+    # Initialize LinearLR scheduler
+    def lr_lambda(epoch):
+        # Ratio of final LR to initial LR
+        ratio = cfg.FINAL_LEARNING_RATE / cfg.LEARNING_RATE
 
-    # scheduler = LambdaLR(optimizer, lr_lambda=linear_lr_lambda)
+        if epoch < cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES:
+            fraction = epoch / cfg.ANNEALING_STEPS
+            return (1.0 - fraction) + fraction * ratio
+        else:
+            return ratio
+
+    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
     # Initialize TensorBoard writer
     sub_dir = "debug" if cfg.DEBUG else "train"
@@ -192,35 +209,42 @@ def main():
     logger.info(f"Logging to {log_dir} directory")
     writer = SummaryWriter(log_dir=log_dir)
 
+    # Warm-up configuration
+    warmup_batches = cfg.WARMUP_BATCHES
+    current_batch = 1
+    warmup_done = False
+
     best_loss = float("inf")
     early_stop_counter = 0
     max_early_stop = cfg.MAX_EARLY_STOP
 
     for epoch in range(cfg.NUM_EPOCHS):
         logger.info(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}")
-        results_train = train(model, train_loader, optimizer, criterion, device)
+        results_train = train(model, train_loader, optimizer, criterion, device, current_batch, warmup_batches)
+        current_batch = results_train["current_batch"]
+
+        logger.info(f"Model's device: {next(model.parameters()).device}")
         results_val = not cfg.DEBUG and val(model, val_loader, criterion, device)
 
-        # Step the scheduler
-        # scheduler.step()
+        # Step the scheduler if the warm-up done
+        if warmup_done:
+            scheduler.step()
 
-        # Adjust learning rate
-        # if epoch < cfg.WARMUP_STEPS:
-        #    lr = cfg.LEARNING_RATE * (epoch / cfg.WARMUP_STEPS)
-        # else:
-        #    lr = cfg.LEARNING_RATE
-
-        # if epoch < cfg.WARMUP_STEPS:
-        #    logger.info(f"Warmup phase. Learning rate: {lr:.6f}")
-        # else:
-        #    logger.info(f"Normal phase. learning rate: {lr:.6f}")
-
-        # for param_group in optimizer.param_groups:
-        #    param_group["lr"] = lr
+        # Warmup done?
+        if not warmup_done and current_batch > warmup_batches:
+            logger.info(f"Warmup finished.")
+            warmup_done = True
 
         # Log epoch-level losses
+        logger.info(f"Train Loss: {results_train['loss']:.5f}")
+        not cfg.DEBUG and logger.info(f"Validation Loss: {results_val['loss']:.5f}")
+
+        # Log losses to TensorBoard
         writer.add_scalar("Train Loss", results_train["loss"], epoch)
         not cfg.DEBUG and writer.add_scalar("Val Loss", results_val["loss"], epoch)
+
+        # Log learning rate
+        writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
 
         # Log gradients
         for name, param in model.named_parameters():
@@ -246,9 +270,6 @@ def main():
             # Write embeddings
             writer.add_embedding(all_emb, metadata=labels, tag="multi_embeddings", global_step=epoch)
 
-        print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Train Loss: {results_train['loss']:.4f}")
-        not cfg.DEBUG and print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Val Loss: {results_val['loss']:.4f}")
-
         # Early stopping logic
         if not cfg.DEBUG:
             if results_val["loss"] < best_loss:
@@ -256,36 +277,35 @@ def main():
                 early_stop_counter = 0
 
                 # Log the best loss
-                logger.info(f"Best validation loss: {best_loss:.4f}. Saving model...")
+                logger.info(f"Best validation loss: {best_loss:.5f}. Saving model...")
 
                 # Save model
                 if not os.path.exists(cfg.MODELS_DIR):
                     os.makedirs(cfg.MODELS_DIR)
 
-                model_name = "baseline_mlp.pth" if cfg.BASE else "mol_predictor.pth"
-                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, model_name))
-                logger.info("Model saved as mol_predictor.pth")
+                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, get_model_name()))
+                logger.info(f"Model saved as {get_model_name()}")
             else:
-                early_stop_counter += 1
+                if cfg.MAX_EARLY_STOP:
+                    early_stop_counter += 1
         else:
             if results_train["loss"] < best_loss:
                 best_loss = results_train["loss"]
                 early_stop_counter = 0
 
                 # Log the best loss
-                logger.info(f"Best train loss: {best_loss:.4f}. Saving model...")
+                logger.info(f"Best train loss: {best_loss:.5f}. Saving model...")
 
                 # Save model
                 if not os.path.exists(cfg.MODELS_DIR):
                     os.makedirs(cfg.MODELS_DIR)
 
-                model_name = "baseline_mlp.pth" if cfg.BASE else "mol_predictor.pth"
-                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, model_name))
-                logger.info("Model saved as mol_predictor.pth")
+                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, get_model_name()))
+                logger.info(f"Model saved as {get_model_name()}")
             else:
                 early_stop_counter += 1
 
-        if early_stop_counter >= max_early_stop:
+        if cfg.MAX_EARLY_STOP and early_stop_counter >= max_early_stop:
             print(f"Early stopping triggered. No improvement for {cfg.MAX_EARLY_STOP} epochs.")
             break
 
@@ -305,13 +325,11 @@ def evaluate():
     if cfg.BASE:
         logger.info("Using Baseline MLP model.")
         model = BaselineMLP().to(cfg.DEVICE)
-        model_name = "baseline_mlp.pth"
     else:
         logger.info("Using MolPredictor model.")
         model = MolPredictor().to(cfg.DEVICE)
-        model_name = "mol_predictor.pth"
 
-    model.load_state_dict(torch.load(os.path.join(cfg.MODELS_DIR, model_name)))
+    model.load_state_dict(torch.load(os.path.join(cfg.MODELS_DIR, get_model_name())))
     model.eval()
 
     # Load the dataset
@@ -328,18 +346,11 @@ def evaluate():
     eval_dataset = MolDataset(ROOT, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
     eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=cfg.NUM_WORKERS)
 
-    # Print debug data
-    if cfg.DEBUG:
-        for batch in eval_loader:
-            logger.info(f"Batch: {batch}")
-            logger.info(f"Batch targets: {batch.y}")
-
-    # Initialize eval dictionaries
-    keys = {"pIC50 (SARS-CoV-2 Mpro)", "pIC50 (MERS-CoV Mpro)"}
+    # Evaluate the model
     predictions = {}
     targets = {}
+    keys = {"pIC50 (SARS-CoV-2 Mpro)", "pIC50 (MERS-CoV Mpro)"}
 
-    # Evaluate the model
     for num, key in enumerate(keys):
         predictions[key] = []
         targets[key] = []
@@ -351,7 +362,6 @@ def evaluate():
                 pred = model(batch)
             else:
                 pred = model(batch)["pred"]
-
             pred = pred.cpu().detach().numpy()
             pred = scaler_y.inverse_transform(pred)[:, num]
             y = scaler_y.inverse_transform(batch.y.cpu().detach().numpy())[:, num]
@@ -389,6 +399,7 @@ def evaluate():
 
     logger.info("Evaluation results:")
     pprint(evaluation_results)
+
     writer.close()
 
 
