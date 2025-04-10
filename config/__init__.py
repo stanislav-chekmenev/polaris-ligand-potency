@@ -8,10 +8,10 @@ from torch_geometric.nn.pool import global_add_pool, global_mean_pool
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_EPOCHS = 50
 LEARNING_RATE = 1e-3
-MAX_EARLY_STOP = 50
+MAX_EARLY_STOP = 10
 WEIGHT_DECAY = 1e-5
 WARMUP_STEPS = 50
-RUN_NAME = None  # "mp_mace_LR_1e-3_CLIP_5_mean_pool_BS_1_CONF_1_no_sample"
+RUN_NAME = "BASE_BS_1_NC_1_NM_4_LR_1e-3"
 GRADIENT_CLIP = 5.0
 
 #### DEBUGGING CONFIG ####
@@ -80,4 +80,5 @@ TEST_DIR = ROOT / "data" / "test"
 SCALER_PATH = ROOT / "data" / "train" / "processed" / "scalers.pkl"
 
 # MODELS DIR
-MODELS_DIR = ROOT / "models" / "trained_models"
+SUFFIX = "debug" if DEBUG else "final"
+MODELS_DIR = ROOT / "models" / "trained_models" / SUFFIX

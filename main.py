@@ -186,9 +186,11 @@ def main():
     # scheduler = LambdaLR(optimizer, lr_lambda=linear_lr_lambda)
 
     # Initialize TensorBoard writer
-    run_name = "runs/" + cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
-    logger.info(f"Logging to {run_name} directory")
-    writer = SummaryWriter(log_dir=run_name)
+    sub_dir = "debug" if cfg.DEBUG else "train"
+    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
+    log_dir = os.path.join("runs", sub_dir, run_name)
+    logger.info(f"Logging to {log_dir} directory")
+    writer = SummaryWriter(log_dir=log_dir)
 
     best_loss = float("inf")
     early_stop_counter = 0
@@ -197,7 +199,7 @@ def main():
     for epoch in range(cfg.NUM_EPOCHS):
         logger.info(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}")
         results_train = train(model, train_loader, optimizer, criterion, device)
-        results_val = cfg.DEBUG and eval(model, val_loader, criterion, device)
+        results_val = not cfg.DEBUG and eval(model, val_loader, criterion, device)
 
         # Step the scheduler
         # scheduler.step()
@@ -218,7 +220,7 @@ def main():
 
         # Log epoch-level losses
         writer.add_scalar("Train Loss", results_train["loss"], epoch)
-        cfg.DEBUG and writer.add_scalar("Val Loss", results_val["loss"], epoch)
+        not cfg.DEBUG and writer.add_scalar("Val Loss", results_val["loss"], epoch)
 
         # Log gradients
         for name, param in model.named_parameters():
@@ -245,7 +247,7 @@ def main():
             writer.add_embedding(all_emb, metadata=labels, tag="multi_embeddings", global_step=epoch)
 
         print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Train Loss: {results_train['loss']:.4f}")
-        cfg.DEBUG and print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Val Loss: {results_val['loss']:.4f}")
+        not cfg.DEBUG and print(f"Epoch {epoch + 1}/{cfg.NUM_EPOCHS}, Val Loss: {results_val['loss']:.4f}")
 
         # Early stopping logic
         if not cfg.DEBUG:
@@ -257,7 +259,11 @@ def main():
                 logger.info(f"Best validation loss: {best_loss:.4f}. Saving model...")
 
                 # Save model
-                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, "mol_predictor.pth"))
+                if not os.path.exists(cfg.MODELS_DIR):
+                    os.makedirs(cfg.MODELS_DIR)
+
+                model_name = "baseline_mlp.pth" if cfg.BASE else "mol_predictor.pth"
+                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, model_name))
                 logger.info("Model saved as mol_predictor.pth")
             else:
                 early_stop_counter += 1
@@ -265,6 +271,17 @@ def main():
             if results_train["loss"] < best_loss:
                 best_loss = results_train["loss"]
                 early_stop_counter = 0
+
+                # Log the best loss
+                logger.info(f"Best train loss: {best_loss:.4f}. Saving model...")
+
+                # Save model
+                if not os.path.exists(cfg.MODELS_DIR):
+                    os.makedirs(cfg.MODELS_DIR)
+
+                model_name = "baseline_mlp.pth" if cfg.BASE else "mol_predictor.pth"
+                torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, model_name))
+                logger.info("Model saved as mol_predictor.pth")
             else:
                 early_stop_counter += 1
 
@@ -301,13 +318,15 @@ def evaluate():
     if cfg.DEBUG:
         ROOT = cfg.TRAIN_DIR
         NUM_MOLECULES = cfg.NUM_MOLECULES
+        BATCH_SIZE = 1
     else:
         ROOT = cfg.TEST_DIR
         NUM_MOLECULES = None
+        BATCH_SIZE = cfg.BATCH_SIZE
 
     logger.info(f"Loading dataset from {ROOT} with {NUM_MOLECULES} molecules.")
     eval_dataset = MolDataset(ROOT, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
-    eval_loader = DataLoader(eval_dataset, batch_size=cfg.BATCH_SIZE, shuffle=False, num_workers=cfg.NUM_WORKERS)
+    eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False, num_workers=cfg.NUM_WORKERS)
 
     # Print debug data
     if cfg.DEBUG:
@@ -343,12 +362,38 @@ def evaluate():
 
     # Run evaluation script (NaNs are taken into account inside the function)
     logger.info("Running evaluation script...")
-    pprint(dict(eval_potency(predictions, targets)))
+    evaluation_results = dict(eval_potency(predictions, targets))
+
+    # Log evaluation results to TensorBoard
+    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
+    log_dir = os.path.join("runs", "evaluation", run_name)
+    writer = SummaryWriter(log_dir=log_dir)
+
+    # Helper function to create a Markdown table
+    def create_markdown_table(results_dict):
+        table_header = "| Metric | Value |\n|--------|-------|\n"
+        table_rows = "\n".join([f"| {key} | {value:.6f} |" for key, value in results_dict.items()])
+        return table_header + table_rows
+
+    # Log aggregated results as a table
+    if "aggregated" in evaluation_results:
+        aggregated_table = create_markdown_table(evaluation_results["aggregated"])
+        writer.add_text("Evaluation Results/Aggregated", aggregated_table, global_step=0)
+
+    # Log individual results for each key
+    for key in ["pIC50 (SARS-CoV-2 Mpro)", "pIC50 (MERS-CoV Mpro)"]:
+        if key in evaluation_results:
+            key_table = create_markdown_table(evaluation_results[key])
+            writer.add_text(f"Evaluation Results/{key}", key_table, global_step=0)
+
+    logger.info("Evaluation results:")
+    pprint(evaluation_results)
+    writer.close()
 
 
 if __name__ == "__main__":
     # Train the model
-    main()
+    # main()
 
     # Evaluate the model
     evaluate()
