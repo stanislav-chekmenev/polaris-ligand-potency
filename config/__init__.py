@@ -72,10 +72,12 @@ GAT_NODE_AGGREGATION = global_mean_pool
 # NODE FEATURE AGGREGATION
 NODE_AGGREGATION = global_mean_pool
 
-
 #### DATA CONFIG ####
 ROOT = Path(__file__).parent.parent
 TRAIN_DIR = ROOT / "data" / "train"
 VAL_DIR = ROOT / "data" / "val"
 TEST_DIR = ROOT / "data" / "test"
 SCALER_PATH = ROOT / "data" / "train" / "processed" / "scalers.pkl"
+
+# MODELS DIR
+MODELS_DIR = ROOT / "models" / "trained_models"
