@@ -326,7 +326,7 @@ def evaluate():
 
     logger.info(f"Loading dataset from {ROOT} with {NUM_MOLECULES} molecules.")
     eval_dataset = MolDataset(ROOT, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
-    eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False, num_workers=cfg.NUM_WORKERS)
+    eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=cfg.NUM_WORKERS)
 
     # Print debug data
     if cfg.DEBUG:

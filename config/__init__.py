@@ -16,7 +16,7 @@ GRADIENT_CLIP = 5.0
 
 #### DEBUGGING CONFIG ####
 NUM_MOLECULES = 4
-DEBUG = True
+DEBUG = False
 
 #### BASELINE CONFIG ####
 BASE = True
