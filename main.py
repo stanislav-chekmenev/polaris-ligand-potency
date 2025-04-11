@@ -221,7 +221,7 @@ def main():
 
     # Initialize TensorBoard writer
     sub_dir = "debug" if cfg.DEBUG else "train"
-    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
+    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder(evaluation=False)
     log_dir = os.path.join("runs", sub_dir, run_name)
     logger.info(f"Logging to {log_dir} directory")
     writer = SummaryWriter(log_dir=log_dir)
@@ -408,7 +408,7 @@ def evaluate():
 
     # Log evaluation results to TensorBoard
     sub_dir = "debug" if cfg.DEBUG else "final"
-    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
+    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder(evaluation=True)
     log_dir = os.path.join("runs", "evaluation", sub_dir, run_name)
     writer = SummaryWriter(log_dir=log_dir)
 

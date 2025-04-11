@@ -48,9 +48,9 @@ class MACEBaryModel(MACEModel):
         batch.h_mace = torch.nan_to_num(batch.h_mace, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Compute barycenters for each molecule in the batch
-        barycenters = self.compute_barycenters(batch)
+        # barycenters = self.compute_barycenters(batch)
 
-        return batch, barycenters
+        return batch  # , barycenters
 
     def compute_barycenters(self, batch) -> Batch:
         """

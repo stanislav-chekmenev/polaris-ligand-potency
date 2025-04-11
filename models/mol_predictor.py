@@ -53,7 +53,7 @@ class MolPredictor(torch.nn.Module):
 
         # Get the MACE 3d features of dim = [batch_size, num_nodes, out_emb_dim]
         # and the barycenters of dim = [batch_size, out_emb_dim]
-        batch, barycenters = self.mace_bary(batch)
+        batch = self.mace_bary(batch)
 
         """
         # Aggregate MACE 3D features accross all nodes in the batch.

@@ -9,11 +9,11 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_EPOCHS = 50
 LEARNING_RATE = 1e-3
 ANNEALING_STEPS = 10
-FINAL_LEARNING_RATE = 1e-3
+FINAL_LEARNING_RATE = 1e-4
 MAX_EARLY_STOP = None
 WEIGHT_DECAY = 1e-5
 WARMUP_BATCHES = 0
-RUN_NAME = None  # "SUM_GAT_EMB_DIM_64_BS_2_NC_1_NM_ALL_LR_1e-3_1e-4_WB_500"
+RUN_NAME = "MACE_NO_BN_5_LAY_LR_1e-3_1e-4"
 GRADIENT_CLIP = 5.0
 MODEL_NAME = "mace"
 
@@ -47,13 +47,13 @@ NUM_HEADS = 4
 IN_ATTENTION_DIM = EMB_DIM
 
 # MACE BARYCENTER
-MACE_KWARGS = MACE_KWARGS = {
+MACE_KWARGS = {
     "r_max": 10.0,
     "num_bessel": 8,
     "num_polynomial_cutoff": 5,
     "max_ell": 2,
     "correlation": 3,
-    "num_layers": 7,
+    "num_layers": 5,
     "emb_dim": EMB_DIM,
     "hidden_irreps": None,
     "mlp_dim": 64,
@@ -61,7 +61,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "out_dim": 1,
     "aggr": "sum",
     "pool": "sum",
-    "batch_norm": True,
+    "batch_norm": False,
     "residual": True,
     "equivariant_pred": False,
     "as_featurizer": True,
