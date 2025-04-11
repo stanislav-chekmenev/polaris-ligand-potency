@@ -6,23 +6,23 @@ from torch_geometric.nn.pool import global_add_pool, global_mean_pool
 
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-NUM_EPOCHS = 100
-LEARNING_RATE = 5e-4
-ANNEALING_STEPS = 30
-FINAL_LEARNING_RATE = 1e-4
+NUM_EPOCHS = 50
+LEARNING_RATE = 1e-3
+ANNEALING_STEPS = 10
+FINAL_LEARNING_RATE = 1e-3
 MAX_EARLY_STOP = None
 WEIGHT_DECAY = 1e-5
-WARMUP_BATCHES = 500
-RUN_NAME = "BASE_BS_1_NC_1_NM_4_LR_1e-3"
+WARMUP_BATCHES = 0
+RUN_NAME = None  # "SUM_GAT_EMB_DIM_64_BS_2_NC_1_NM_ALL_LR_1e-3_1e-4_WB_500"
 GRADIENT_CLIP = 5.0
-MODEL_NAME = "embedder_gat"
+MODEL_NAME = "mace"
 
 #### DEBUGGING CONFIG ####
 NUM_MOLECULES = 4
-DEBUG = False
+DEBUG = True
 
 #### BASELINE CONFIG ####
-BASE = True
+BASE = False
 
 # CONFORMERS
 NUM_CONFORMERS = 10
@@ -30,7 +30,7 @@ NUM_CONFORMERS_SAMPLE = 1
 NUM_THREADS = 8
 
 # DATA LOADING
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 NUM_WORKERS = multiprocessing.cpu_count() - 1
 
 # FEATURES
@@ -53,14 +53,14 @@ MACE_KWARGS = MACE_KWARGS = {
     "num_polynomial_cutoff": 5,
     "max_ell": 2,
     "correlation": 3,
-    "num_layers": 5,
+    "num_layers": 7,
     "emb_dim": EMB_DIM,
     "hidden_irreps": None,
     "mlp_dim": 64,
     "in_dim": NUM_POSSIBLE_ATOMS,
     "out_dim": 1,
     "aggr": "sum",
-    "pool": "mean",
+    "pool": "sum",
     "batch_norm": True,
     "residual": True,
     "equivariant_pred": False,

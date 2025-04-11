@@ -125,11 +125,20 @@ def val(model, loader, criterion, device):
     return result
 
 
-def get_next_run_folder(base_dir="runs"):
+def get_next_run_folder(base_dir="runs", evaluation=False):
     """
     Creates the next folder name with consecutive numbers in the given base directory.
     Example: 001, 002, etc.
     """
+    if evaluation:
+        base_dir = os.path.join(base_dir, "evaluation")
+        if cfg.DEBUG:
+            base_dir = os.path.join(base_dir, "debug")
+        else:
+            base_dir = os.path.join(base_dir, "final")
+    else:
+        suffix = "debug" if cfg.DEBUG else "train"
+        base_dir = os.path.join(base_dir, suffix)
     os.makedirs(base_dir, exist_ok=True)
     existing = [name for name in os.listdir(base_dir) if name.isdigit()]
     next_number = max([int(name) for name in existing], default=0) + 1
@@ -160,7 +169,7 @@ def main():
         logger.info(f"Debug mode: Loading only {cfg.NUM_MOLECULES} molecules for training.")
         NUM_MOLECULES = cfg.NUM_MOLECULES
         SHUFFLE = False
-        BATCH_SIZE = 1
+        BATCH_SIZE = 4
     else:
         logger.info(f"Loading the entire dataset for training.")
         NUM_MOLECULES = None
@@ -169,6 +178,12 @@ def main():
 
     train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=cfg.NUM_WORKERS)
+
+    if cfg.DEBUG:
+        # Print batch info
+        for batch in train_loader:
+            logger.info(f"First 5 batch positions of conformer 0: \n {batch.pos[:5, 0, :]}")
+            logger.info(f"Batch targets: {batch.y}")
 
     if not cfg.DEBUG:
         val_dataset = MolDataset(cfg.VAL_DIR, scaler_path=cfg.SCALER_PATH)
@@ -194,8 +209,10 @@ def main():
         # Ratio of final LR to initial LR
         ratio = cfg.FINAL_LEARNING_RATE / cfg.LEARNING_RATE
 
-        if epoch < cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES:
+        if cfg.WARMUP_BATCHES and epoch < cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES:
             fraction = epoch / cfg.ANNEALING_STEPS
+            if fraction > 1.0:
+                fraction = 1.0
             return (1.0 - fraction) + fraction * ratio
         else:
             return ratio
@@ -336,7 +353,7 @@ def evaluate():
     if cfg.DEBUG:
         ROOT = cfg.TRAIN_DIR
         NUM_MOLECULES = cfg.NUM_MOLECULES
-        BATCH_SIZE = 1
+        BATCH_SIZE = 4
     else:
         ROOT = cfg.TEST_DIR
         NUM_MOLECULES = None
@@ -345,6 +362,12 @@ def evaluate():
     logger.info(f"Loading dataset from {ROOT} with {NUM_MOLECULES} molecules.")
     eval_dataset = MolDataset(ROOT, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
     eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=cfg.NUM_WORKERS)
+
+    if cfg.DEBUG:
+        # Print batch info
+        for batch in eval_loader:
+            logger.info(f"First 5 batch positions of conformer 0: \n {batch.pos[:5, 0, :]}")
+            logger.info(f"Batch targets: {batch.y}")
 
     # Evaluate the model
     predictions = {}
@@ -362,6 +385,11 @@ def evaluate():
                 pred = model(batch)
             else:
                 pred = model(batch)["pred"]
+
+            if cfg.DEBUG:
+                logger.info(f"Batch targets: {batch.y}")
+                logger.info(f"Batch predictions: {pred}")
+
             pred = pred.cpu().detach().numpy()
             pred = scaler_y.inverse_transform(pred)[:, num]
             y = scaler_y.inverse_transform(batch.y.cpu().detach().numpy())[:, num]
