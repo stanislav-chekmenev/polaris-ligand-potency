@@ -226,6 +226,10 @@ def main():
     logger.info(f"Logging to {log_dir} directory")
     writer = SummaryWriter(log_dir=log_dir)
 
+    # Log config data to TensorBoard
+    config_data = {k: str(v) for k, v in cfg.__dict__.items() if k.isupper()}
+    writer.add_hparams(config_data, {"placeholder": 0})
+
     # Warm-up configuration
     warmup_batches = cfg.WARMUP_BATCHES
     current_batch = 1
@@ -407,6 +411,10 @@ def evaluate():
     run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder()
     log_dir = os.path.join("runs", "evaluation", sub_dir, run_name)
     writer = SummaryWriter(log_dir=log_dir)
+
+    # Log config data to TensorBoard
+    config_data = dict(cfg.__dict__)
+    writer.add_hparams(config_data)
 
     # Helper function to create a Markdown table
     def create_markdown_table(results_dict):
