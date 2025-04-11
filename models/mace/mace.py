@@ -39,7 +39,7 @@ class MACEModel(torch.nn.Module):
         batch_norm: bool = True,
         residual: bool = True,
         equivariant_pred: bool = False,
-        as_featurizer: bool = True
+        as_featurizer: bool = True,
     ):
         """
         Parameters:
@@ -188,7 +188,7 @@ class MACEModel(torch.nn.Module):
             # Return only the node scalar features for featurization in the invariant prediction task
             h = h[:, : self.emb_dim]
             # Create a new batch attribute, which is the MACE features
-            batch.h_mace = h
+            batch.h_mace = h  # dim = [NUM_CONFORMERS_SAMPLE * BATCH_SIZE; emb_dim]
             return batch
 
         out = self.pool(h, batch.batch)  # (n, d) -> (batch_size, d)

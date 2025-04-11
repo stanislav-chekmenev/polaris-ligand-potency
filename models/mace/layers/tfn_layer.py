@@ -69,7 +69,7 @@ class TensorProductConvLayer(torch.nn.Module):
         # MLP used to compute weights of tensor product
         self.fc = torch.nn.Sequential(
             torch.nn.Linear(edge_feats_dim, mlp_dim),
-            torch.nn.ReLU(),
+            torch.nn.SiLU(),
             torch.nn.Linear(mlp_dim, self.tp.weight_numel),
         )
 

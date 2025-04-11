@@ -2,14 +2,32 @@ import torch
 import multiprocessing
 
 from pathlib import Path
-from torch_geometric.nn.pool import global_add_pool
+from torch_geometric.nn.pool import global_add_pool, global_mean_pool
 
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+NUM_EPOCHS = 50
+LEARNING_RATE = 1e-3
+ANNEALING_STEPS = 10
+FINAL_LEARNING_RATE = 1e-3
+MAX_EARLY_STOP = None
+WEIGHT_DECAY = 1e-5
+WARMUP_BATCHES = 0
+RUN_NAME = None  # "SUM_GAT_EMB_DIM_64_BS_2_NC_1_NM_ALL_LR_1e-3_1e-4_WB_500"
+GRADIENT_CLIP = 5.0
+MODEL_NAME = "mace"
+
+#### DEBUGGING CONFIG ####
+NUM_MOLECULES = 4
+DEBUG = True
+
+#### BASELINE CONFIG ####
+BASE = False
 
 # CONFORMERS
 NUM_CONFORMERS = 10
-NUM_CONFORMERS_SAMPLE = 3
+NUM_CONFORMERS_SAMPLE = 1
+NUM_THREADS = 8
 
 # DATA LOADING
 BATCH_SIZE = 2
@@ -21,7 +39,7 @@ PREDICTION_DIM = 2  # Do not change, since it's the number of possible propertie
 
 # FEATURE EMBEDDER #
 IN_MOL_DIM = 790
-NODE_DIM = 24
+NODE_DIM = 18
 EMB_DIM = 64
 
 # ATTENTION
@@ -35,7 +53,7 @@ MACE_KWARGS = MACE_KWARGS = {
     "num_polynomial_cutoff": 5,
     "max_ell": 2,
     "correlation": 3,
-    "num_layers": 5,
+    "num_layers": 7,
     "emb_dim": EMB_DIM,
     "hidden_irreps": None,
     "mlp_dim": 64,
@@ -52,13 +70,18 @@ MACE_KWARGS = MACE_KWARGS = {
 # GAT
 EDGE_DIM = 8
 IN_GAT_DIM = EMB_DIM
-GAT_NODE_AGGREGATION = global_add_pool
+GAT_NODE_AGGREGATION = global_mean_pool
 
 # NODE FEATURE AGGREGATION
-NODE_AGGREGATION = global_add_pool
-
+NODE_AGGREGATION = global_mean_pool
 
 #### DATA CONFIG ####
 ROOT = Path(__file__).parent.parent
 TRAIN_DIR = ROOT / "data" / "train"
+VAL_DIR = ROOT / "data" / "val"
 TEST_DIR = ROOT / "data" / "test"
+SCALER_PATH = ROOT / "data" / "train" / "processed" / "scalers.pkl"
+
+# MODELS DIR
+SUFFIX = "debug" if DEBUG else "final"
+MODELS_DIR = ROOT / "models" / "trained_models" / SUFFIX

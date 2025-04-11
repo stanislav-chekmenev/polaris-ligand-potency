@@ -3,10 +3,12 @@ import logging
 import numpy as np
 import os
 import pandas as pd
+import pickle
 import torch
 
 from datamol.descriptors.compute import _DEFAULT_PROPERTIES_FN
 from graphium.features import featurizer as gff
+from sklearn.preprocessing import StandardScaler
 from torch_geometric.data import InMemoryDataset, Data
 from torch_geometric.data import InMemoryDataset, Data
 from torch_geometric.transforms import Compose
@@ -25,10 +27,12 @@ class MolDataset(InMemoryDataset):
     def __init__(
         self,
         root: str,
+        scaler_path: str,
         pre_transform: callable = Compose([NormalizeScaleWithZeros(), ConcatenateGlobal()]),
         transform=None,
         **kwargs,
     ):
+        self.scaler_path = scaler_path
         super().__init__(root, pre_transform=pre_transform, transform=transform, **kwargs)
         self.load(self.processed_paths[0])
 
@@ -49,6 +53,16 @@ class MolDataset(InMemoryDataset):
             data.u_dm = (data.u_dm - desc_mins) / (desc_maxs - desc_mins)
             data.u_dm = torch.nan_to_num(data.u_dm, nan=0.0, posinf=0.0, neginf=0.0)
 
+    def apply_scalers(self, data, scaler_x, scaler_y, scaler_u, scaler_edge):
+        # Apply the scalers to the data
+        data.x = torch.tensor(scaler_x.transform(data.x), dtype=torch.float)
+        data.y = torch.tensor(scaler_y.transform(data.y), dtype=torch.float)
+        data.u = torch.tensor(scaler_u.transform(data.u), dtype=torch.float)
+        data.edge_attr[:, -1] = torch.tensor(
+            scaler_edge.transform(data.edge_attr[:, -1].view(-1, 1)), dtype=torch.float
+        ).view(-1)
+        return data
+
     def process(self) -> None:
         raw_files = self.raw_file_names
 
@@ -60,10 +74,6 @@ class MolDataset(InMemoryDataset):
 
         # Create a list to store the data objects
         data_list = []
-
-        # Init an array to hold the statistics of the molecular descriptors
-        desc_mins = torch.ones(len(_DEFAULT_PROPERTIES_FN), dtype=torch.float) * 10_000
-        desc_maxs = -torch.ones(len(_DEFAULT_PROPERTIES_FN), dtype=torch.float) * 10_000
 
         for idx in tqdm(range(len(df_data)), desc="Processing molecules", total=len(df_data)):
             dm.disable_rdkit_log()  # stop logging a lot of info for datamol methods calls
@@ -90,10 +100,6 @@ class MolDataset(InMemoryDataset):
             u = list(descriptors.values())
             u_dm = torch.tensor(u, dtype=torch.float)
 
-            # Update the statistics of the molecular descriptors
-            desc_maxs = torch.where(u_dm > desc_maxs, u_dm, desc_maxs)
-            desc_mins = torch.where(u_dm < desc_mins, u_dm, desc_mins)
-
             # Allowable atomic node and edge features
             atomic_features = [
                 "atomic-number",
@@ -104,7 +110,6 @@ class MolDataset(InMemoryDataset):
                 "implicit-valence",
                 "hybridization",
                 "ring",
-                "in-ring",
                 "min-ring",
                 "max-ring",
                 "num-ring",
@@ -116,12 +121,6 @@ class MolDataset(InMemoryDataset):
                 "electronegativity",
                 "ionization",
                 "first-ionization",
-                "metal",
-                "single-bond",
-                "aromatic-bond",
-                "double-bond",
-                "triple-bond",
-                "is-carbon",
                 "group",
                 "period",
             ]
@@ -142,7 +141,13 @@ class MolDataset(InMemoryDataset):
 
             # Generate conformers
             try:
-                mol_confs = dm.conformers.generate(mol, n_confs=cfg.NUM_CONFORMERS)
+                mol_confs = dm.conformers.generate(
+                    mol,
+                    n_confs=cfg.NUM_CONFORMERS,
+                    num_threads=cfg.NUM_THREADS,
+                    minimize_energy=True,
+                    energy_iterations=200,
+                )
                 list_xyz = [mol_confs.GetConformer(i).GetPositions() for i in range(cfg.NUM_CONFORMERS)]
                 pos_array = np.stack(list_xyz, axis=1)
             except Exception as e:
@@ -169,7 +174,7 @@ class MolDataset(InMemoryDataset):
 
             # Get the target values
             df_y = df_data[["pIC50 (MERS-CoV Mpro)", "pIC50 (SARS-CoV-2 Mpro)"]].iloc[idx]
-            y = torch.tensor(np.array(df_y), dtype=torch.float)
+            y = torch.tensor(np.array(df_y), dtype=torch.float).view(-1, cfg.PREDICTION_DIM)
 
             # Get a PyG data object
             data = Data(
@@ -180,11 +185,54 @@ class MolDataset(InMemoryDataset):
             data_list.append(data)
 
         # Normalize molecular descriptors
-        self.normalize_mol_descriptors(data_list, desc_mins, desc_maxs)
+        # self.normalize_mol_descriptors(data_list, desc_mins, desc_maxs)
 
         # Apply the pre_transform if provided
         if self.pre_transform is not None:
             data_list = [self.pre_transform(data) for data in data_list]
 
+        # Scale features
+        if "train" in self.raw_dir:
+            # Initialize the scalers
+            scaler_x = StandardScaler()
+            scaler_y = StandardScaler()
+            scaler_u = StandardScaler()
+            scaler_edge = StandardScaler()
+
+            # Fit the scalers on the training data
+            x = torch.cat([data.x for data in data_list], dim=0)
+            y = torch.cat([data.y for data in data_list], dim=0)
+            u = torch.cat([data.u for data in data_list], dim=0)
+            edge_attr = torch.cat([data.edge_attr[:, -1] for data in data_list], dim=0)
+
+            scaler_x = scaler_x.fit(x)
+            scaler_y = scaler_y.fit(y)
+            scaler_u = scaler_u.fit(u)
+            scaler_edge = scaler_edge.fit(edge_attr.view(-1, 1))
+
+            # Apply the scalers
+            data_list = [self.apply_scalers(data, scaler_x, scaler_y, scaler_u, scaler_edge) for data in data_list]
+
+            # Save the scalers
+            scalers = {"scaler_x": scaler_x, "scaler_y": scaler_y, "scaler_u": scaler_u, "scaler_edge": scaler_edge}
+            pickle.dump(scalers, open(self.scaler_path, "wb"))
+
+        else:
+            # Load the scalers
+            scalers = pickle.load(open(self.scaler_path, "rb"))
+            scaler_x = scalers["scaler_x"]
+            scaler_y = scalers["scaler_y"]
+            scaler_u = scalers["scaler_u"]
+            scaler_edge = scalers["scaler_edge"]
+
+            # Apply the scalers
+            data_list = [self.apply_scalers(data, scaler_x, scaler_y, scaler_u, scaler_edge) for data in data_list]
+
         # Save the processed data
         self.save(data_list, self.processed_paths[0])
+
+
+if __name__ == "__main__":
+    dataset = MolDataset(root=cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)
+    dataset = MolDataset(root=cfg.VAL_DIR, scaler_path=cfg.SCALER_PATH)
+    dataset = MolDataset(root=cfg.TEST_DIR, scaler_path=cfg.SCALER_PATH)

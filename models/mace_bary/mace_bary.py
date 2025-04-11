@@ -6,14 +6,12 @@ import torch
 from ot.gromov import fgw_barycenters
 from scipy.sparse.csgraph import shortest_path
 from torch_geometric.data import Data, Batch
-from torch_geometric.loader import DataLoader
 from torch_geometric.utils import to_dense_adj
 from typing import Tuple
 
 import config as cfg
 
 from models import MACEModel
-from data.moldataset import MolDataset
 
 
 logging.basicConfig(level=logging.INFO)
@@ -79,7 +77,7 @@ class MACEBaryModel(MACEModel):
             h_mace = batch.h_mace[mask]
             num_nodes = conformers[0].num_nodes
             Ys = [
-                h_mace[i : i + num_nodes].detach().cpu().numpy()
+                h_mace[i : i + num_nodes].cpu().detach().numpy()
                 for i in range(0, num_nodes * cfg.NUM_CONFORMERS_SAMPLE, num_nodes)
             ]
 
@@ -148,6 +146,9 @@ class MACEBaryModel(MACEModel):
 
         # Sample conformers
         conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
+        if cfg.DEBUG:
+            conformer_idx = np.array([0])
+            logger.info(f"Conformer indices: {conformer_idx}")
         batch.pos = batch.pos[:, conformer_idx, :]
         return batch
 
@@ -163,5 +164,5 @@ class MACEBaryModel(MACEModel):
 
         # Compute the cost matrices for each molecule in the batch, using their edge_index.
         adj_matrices = [to_dense_adj(conformer.edge_index).squeeze() for conformer in conformers]
-        Cs_list = [shortest_path(adj.detach().cpu().numpy()) for adj in adj_matrices]
+        Cs_list = [shortest_path(adj.cpu().detach().numpy()) for adj in adj_matrices]
         return Cs_list
