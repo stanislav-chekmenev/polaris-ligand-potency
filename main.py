@@ -412,10 +412,6 @@ def evaluate():
     log_dir = os.path.join("runs", "evaluation", sub_dir, run_name)
     writer = SummaryWriter(log_dir=log_dir)
 
-    # Log config data to TensorBoard
-    config_data = dict(cfg.__dict__)
-    writer.add_hparams(config_data)
-
     # Helper function to create a Markdown table
     def create_markdown_table(results_dict):
         table_header = "| Metric | Value |\n|--------|-------|\n"
