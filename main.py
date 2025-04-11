@@ -208,8 +208,13 @@ def main():
     def lr_lambda(epoch):
         # Ratio of final LR to initial LR
         ratio = cfg.FINAL_LEARNING_RATE / cfg.LEARNING_RATE
+        anneal_epochs = (
+            cfg.ANNEALING_STEPS
+            if not cfg.WARMUP_BATCHES
+            else cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES
+        )
 
-        if cfg.WARMUP_BATCHES and epoch < cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES:
+        if epoch < anneal_epochs:
             fraction = epoch / cfg.ANNEALING_STEPS
             if fraction > 1.0:
                 fraction = 1.0
