@@ -53,7 +53,7 @@ class MolPredictor(torch.nn.Module):
 
         # Get the MACE 3d features of dim = [batch_size, num_nodes, out_emb_dim]
         # and the barycenters of dim = [batch_size, out_emb_dim]
-        batch = self.mace_bary(batch)
+        batch, barycenter = self.mace_bary(batch)
 
         """
         # Aggregate MACE 3D features accross all nodes in the batch.
@@ -68,8 +68,7 @@ class MolPredictor(torch.nn.Module):
         # Apply the transformer block
         x = self.transformer(x).view(cfg.BATCH_SIZE, cfg.EMB_DIM * 4)
         """
-        # batch.batch = self.rebatch(batch)
-        # TODO: do not average accross all conformers!
+        batch.batch = self.rebatch(batch) if not cfg.DEBUG_ONLY_ONE_CONFORMER else batch.batch
         h_mace = self.aggr(batch.h_mace, batch.batch)
         # x = torch.cat([h_mol, h_gat], dim=-1)
         # h_mace = torch.zeros_like(h_gat)
@@ -82,9 +81,9 @@ class MolPredictor(torch.nn.Module):
         batch_range = range(cfg.BATCH_SIZE)
 
         # Get the indices for the molecules in the batch -> e.g. [0, 0, 0, 1, 1, 1] for batch size = 2 and 3 conformers
-        mol_idx = np.repeat(np.array(list(batch_range)), cfg.NUM_CONFORMERS_SAMPLE).tolist()
+        mol_indices = np.repeat(np.array(list(batch_range)), cfg.NUM_CONFORMERS_SAMPLE).tolist()
 
-        for conformer_idx, mol_idx in zip(range(batch.num_graphs), mol_idx):
+        for conformer_idx, mol_idx in zip(range(batch.num_graphs), mol_indices):
             new_batch[new_batch == conformer_idx] = mol_idx
 
         return new_batch

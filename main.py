@@ -169,7 +169,7 @@ def main():
         logger.info(f"Debug mode: Loading only {cfg.NUM_MOLECULES} molecules for training.")
         NUM_MOLECULES = cfg.NUM_MOLECULES
         SHUFFLE = False
-        BATCH_SIZE = 4
+        BATCH_SIZE = cfg.BATCH_SIZE
     else:
         logger.info(f"Loading the entire dataset for training.")
         NUM_MOLECULES = None

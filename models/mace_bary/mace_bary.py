@@ -41,16 +41,50 @@ class MACEBaryModel(MACEModel):
         # Replicate the graphs for each conformer
         batch = self.replicate_graphs_for_conformers(batch)
 
-        # Run MACE on the batch of conformers for each molecule to get MACE features.
-        batch = super().forward(batch)
+        # Identify molecules without conformers (all zeros in `pos`)
+        no_conformer_mask = torch.tensor(
+            [torch.all(batch.pos[batch.batch == i] == 0) for i in range(batch.num_graphs)], device=batch.pos.device
+        )
 
-        # If MACE features are NaNs, set them to zeros
-        batch.h_mace = torch.nan_to_num(batch.h_mace, nan=0.0, posinf=0.0, neginf=0.0)
+        # If there are molecules without conformers, handle them separately
+        if no_conformer_mask.any():
+            num_no_conformers = no_conformer_mask.sum().item()
+            logger.warning(f"{num_no_conformers} molecules have no conformers. Their embeddings will be set to zeros.")
+
+            data_list = batch.to_data_list()
+            conformer_data = [data for i, data in enumerate(data_list) if not no_conformer_mask[i]]
+
+            # Handle case where all molecules have no conformers
+            if len(conformer_data) == 0:
+                logger.warning("All molecules have no conformers.")
+                for data in data_list:
+                    data.h_mace = torch.zeros(data.num_nodes, super().emb_dim, device=cfg.DEVICE)
+                batch = Batch.from_data_list(data_list)
+            else:
+                # Process molecules that do have conformers
+                conformer_batch = Batch.from_data_list(conformer_data)
+                conformer_batch = super().forward(conformer_batch)
+                conformer_results = iter(conformer_batch.to_data_list())
+
+                # Reassemble the batch, inserting zeros where needed
+                final_data_list = []
+                for has_no_conformer, data in zip(no_conformer_mask, data_list):
+                    if has_no_conformer:
+                        data.h_mace = torch.zeros(data.num_nodes, super().emb_dim, device=cfg.DEVICE)
+                        final_data_list.append(data)
+                    else:
+                        final_data_list.append(next(conformer_results))
+
+                batch = Batch.from_data_list(final_data_list)
+
+        else:
+            # All molecules have conformers -> just run forward pass
+            batch = super().forward(batch)
 
         # Compute barycenters for each molecule in the batch
-        # barycenters = self.compute_barycenters(batch)
+        barycenters = self.compute_barycenters(batch)
 
-        return batch  # , barycenters
+        return batch, barycenters
 
     def compute_barycenters(self, batch) -> Batch:
         """
@@ -143,12 +177,20 @@ class MACEBaryModel(MACEModel):
         Returns:
             torch_geometric.data.Batch: A new batch with sampled conformers.
         """
-
-        # Sample conformers
-        conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
-        if cfg.DEBUG:
-            conformer_idx = np.array([0])
-            logger.info(f"Conformer indices: {conformer_idx}")
+        # Sample conformers if model is training
+        if self.training:
+            conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
+            if cfg.DEBUG and cfg.DEBUG_ONLY_ONE_CONFORMER:
+                conformer_idx = np.array([0])
+                logger.info(f"Conformer indices: {conformer_idx}")
+            else:
+                logger.info(f"Conformer indices: {conformer_idx}")
+        else:
+            if cfg.DEBUG and cfg.DEBUG_ONLY_ONE_CONFORMER:
+                conformer_idx = np.array([0])
+                logger.info(f"Conformer indices: {conformer_idx}")
+            else:
+                conformer_idx = np.arange(cfg.NUM_CONFORMERS_SAMPLE)
         batch.pos = batch.pos[:, conformer_idx, :]
         return batch
 
@@ -161,7 +203,6 @@ class MACEBaryModel(MACEModel):
         Returns:
             list: List of cost matrices for each conformer.
         """
-
         # Compute the cost matrices for each molecule in the batch, using their edge_index.
         adj_matrices = [to_dense_adj(conformer.edge_index).squeeze() for conformer in conformers]
         Cs_list = [shortest_path(adj.cpu().detach().numpy()) for adj in adj_matrices]

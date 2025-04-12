@@ -187,8 +187,15 @@ class MACEModel(torch.nn.Module):
         if self.as_featurizer:
             # Return only the node scalar features for featurization in the invariant prediction task
             h = h[:, : self.emb_dim]
-            # Create a new batch attribute, which is the MACE features
-            batch.h_mace = h  # dim = [NUM_CONFORMERS_SAMPLE * BATCH_SIZE; emb_dim]
+            # Create a new attribute for each graph, which is the MACE features
+            data_list = batch.to_data_list()
+            start = 0
+            for data in enumerate(data_list):
+                h_conformer = h[start : data.num_nodes]
+                data.h_mace = h_conformer
+                start += data.num_nodes
+
+            batch = Batch.from_data_list(data_list)  # dim = [NUM_CONFORMERS_SAMPLE * BATCH_SIZE; emb_dim]
             return batch
 
         out = self.pool(h, batch.batch)  # (n, d) -> (batch_size, d)
