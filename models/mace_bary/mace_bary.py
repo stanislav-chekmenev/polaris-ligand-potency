@@ -22,6 +22,7 @@ class MACEBaryModel(MACEModel):
 
     def __init__(self, mace_kwargs):
         super().__init__(**mace_kwargs)
+        self.dropout = torch.nn.Dropout(0.5)
 
     def forward(self, batch) -> Tuple[Batch, ...]:
         """
@@ -49,16 +50,16 @@ class MACEBaryModel(MACEModel):
         # If there are molecules without conformers, handle them separately
         if no_conformer_mask.any():
             num_no_conformers = no_conformer_mask.sum().item()
-            logger.warning(f"{num_no_conformers} molecules have no conformers. Their embeddings will be set to zeros.")
+            logger.warning(f"{num_no_conformers} conformers have no positions. Their embeddings will be set to zeros.")
 
             data_list = batch.to_data_list()
             conformer_data = [data for i, data in enumerate(data_list) if not no_conformer_mask[i]]
 
             # Handle case where all molecules have no conformers
             if len(conformer_data) == 0:
-                logger.warning("All molecules have no conformers.")
+                logger.warning("All conformers have no positions.")
                 for data in data_list:
-                    data.h_mace = torch.zeros(data.num_nodes, super().emb_dim, device=cfg.DEVICE)
+                    data.h_mace = torch.zeros(data.num_nodes, self.emb_dim, device=cfg.DEVICE)
                 batch = Batch.from_data_list(data_list)
             else:
                 # Process molecules that do have conformers
@@ -70,7 +71,7 @@ class MACEBaryModel(MACEModel):
                 final_data_list = []
                 for has_no_conformer, data in zip(no_conformer_mask, data_list):
                     if has_no_conformer:
-                        data.h_mace = torch.zeros(data.num_nodes, super().emb_dim, device=cfg.DEVICE)
+                        data.h_mace = torch.zeros(data.num_nodes, self.emb_dim, device=cfg.DEVICE)
                         final_data_list.append(data)
                     else:
                         final_data_list.append(next(conformer_results))
@@ -83,6 +84,10 @@ class MACEBaryModel(MACEModel):
 
         # Compute barycenters for each molecule in the batch
         barycenters = self.compute_barycenters(batch)
+
+        # Apply dropout to the MACE features
+        batch.h_mace = self.dropout(batch.h_mace)
+        barycenters.x = self.dropout(barycenters.x)
 
         return batch, barycenters
 
@@ -182,8 +187,6 @@ class MACEBaryModel(MACEModel):
             conformer_idx = np.random.choice(range(cfg.NUM_CONFORMERS), size=cfg.NUM_CONFORMERS_SAMPLE, replace=False)
             if cfg.DEBUG and cfg.DEBUG_ONLY_ONE_CONFORMER:
                 conformer_idx = np.array([0])
-                logger.info(f"Conformer indices: {conformer_idx}")
-            else:
                 logger.info(f"Conformer indices: {conformer_idx}")
         else:
             if cfg.DEBUG and cfg.DEBUG_ONLY_ONE_CONFORMER:

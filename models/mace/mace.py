@@ -190,8 +190,8 @@ class MACEModel(torch.nn.Module):
             # Create a new attribute for each graph, which is the MACE features
             data_list = batch.to_data_list()
             start = 0
-            for data in enumerate(data_list):
-                h_conformer = h[start : data.num_nodes]
+            for data in data_list:
+                h_conformer = h[start : start + data.num_nodes]
                 data.h_mace = h_conformer
                 start += data.num_nodes
 

@@ -20,11 +20,13 @@ class TransformerBlock(torch.nn.Module):
         self.attention = SelfAttention()
         self.layernorm = torch.nn.LayerNorm(cfg.IN_ATTENTION_DIM)
         self.act = torch.nn.SiLU()
+        self.dropout = torch.nn.Dropout(0.5)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_skip = x
         x = self.attention(x)
         x = self.layernorm(x)
         x = self.act(x)
+        x = self.dropout(x)
         x = x + x_skip
         return x

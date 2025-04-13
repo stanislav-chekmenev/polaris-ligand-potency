@@ -177,7 +177,9 @@ def main():
         BATCH_SIZE = cfg.BATCH_SIZE
 
     train_dataset = MolDataset(cfg.TRAIN_DIR, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=cfg.NUM_WORKERS)
+    train_loader = DataLoader(
+        train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=cfg.NUM_WORKERS, drop_last=True
+    )
 
     if cfg.DEBUG:
         # Print batch info
@@ -187,7 +189,9 @@ def main():
 
     if not cfg.DEBUG:
         val_dataset = MolDataset(cfg.VAL_DIR, scaler_path=cfg.SCALER_PATH)
-        val_loader = DataLoader(val_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS)
+        val_loader = DataLoader(
+            val_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True, num_workers=cfg.NUM_WORKERS, drop_last=True
+        )
 
     # Initialize model, loss, and optimizer
     if cfg.BASE:
@@ -370,7 +374,9 @@ def evaluate():
 
     logger.info(f"Loading dataset from {ROOT} with {NUM_MOLECULES} molecules.")
     eval_dataset = MolDataset(ROOT, scaler_path=cfg.SCALER_PATH)[:NUM_MOLECULES]
-    eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=cfg.NUM_WORKERS)
+    eval_loader = DataLoader(
+        eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=cfg.NUM_WORKERS, drop_last=True
+    )
 
     if cfg.DEBUG:
         # Print batch info
