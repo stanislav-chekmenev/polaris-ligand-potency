@@ -15,6 +15,7 @@ class GAT(torch.nn.Module):
         self.act = torch.nn.SiLU()
         self.norm = LayerNorm(in_channels)
         self.aggr = cfg.GAT_NODE_AGGREGATION
+        self.dropout = torch.nn.Dropout(0.5)
 
     def forward(self, batch):
         """
@@ -27,11 +28,13 @@ class GAT(torch.nn.Module):
         x_skip = batch.x
         h = self.gat_conv1(batch.x, batch.edge_index, batch.edge_attr)
         h = self.act(h)
+        h = self.dropout(h)
         h = h + x_skip  # this addition helps to propagate the gradients
         # Second layer with a skip connection
         x_skip = h
         h = self.gat_conv2(h, batch.edge_index, batch.edge_attr)
         h = self.act(h)
+        h = self.dropout(h)
         h = h + x_skip
         # Apply layer normalization
         h = self.norm(h)
