@@ -1,9 +1,12 @@
 import os
 import logging
+import matplotlib.pyplot as plt
+import io
 import numpy as np
 import pickle
 import random
 import torch
+import torchvision
 
 from pprint import pprint
 from torch_geometric.loader import DataLoader
@@ -61,6 +64,7 @@ def train(model, loader, optimizer, criterion, device, current_batch, warmup_bat
             h_mol = outputs["mol_emb"]
             h_gat = outputs["gat_emb"]
             h_mace = outputs["mace_emb"]
+            att = outputs["att"]
 
         # Mask NaN values in the target
         mask = ~torch.isnan(batch.y)
@@ -82,6 +86,7 @@ def train(model, loader, optimizer, criterion, device, current_batch, warmup_bat
         "h_mol": h_mol if not cfg.BASE else None,
         "h_gat": h_gat if not cfg.BASE else None,
         "h_mace": h_mace if not cfg.BASE else None,
+        "att": att if not cfg.BASE else None,
         "current_batch": current_batch,
     }
 
@@ -103,6 +108,7 @@ def val(model, loader, criterion, device):
                 h_mol = outputs["mol_emb"]
                 h_gat = outputs["gat_emb"]
                 h_mace = outputs["mace_emb"]
+                att = outputs["att"]
 
             # Mask NaN values in the target
             # [True, False] if batch size = 1, batch.y = [some_value, NaN]
@@ -120,6 +126,7 @@ def val(model, loader, criterion, device):
         "h_mol": h_mol if not cfg.BASE else None,
         "h_gat": h_gat if not cfg.BASE else None,
         "h_mace": h_mace if not cfg.BASE else None,
+        "att": att if not cfg.BASE else None,
     }
 
     return result
@@ -154,6 +161,37 @@ def get_model_name():
     full_model_name += ".pth"
     model_name = "baseline_mlp.pth" if cfg.BASE else full_model_name
     return model_name
+
+
+def plot_attention_heatmap(att_weights, title="Attention Weights"):
+    fig, ax = plt.subplots(figsize=(10, 8))
+    cax = ax.matshow(
+        att_weights,
+        cmap="viridis",
+    )
+    fig.colorbar(cax)
+    ax.set_title(title)
+    plt.ylabel("0: Mol emb, 1: GAT emb, 2: MACE emb, 3: Barycenter emb")
+
+    # Add numerical values to each cell
+    for (i, j), val in np.ndenumerate(att_weights):
+        ax.text(
+            j,
+            i,
+            f"{val:.2f}",
+            ha="center",
+            va="center",
+            color="white",
+            fontsize=14,
+        )
+
+    # Convert plot to image tensor
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    image = torchvision.transforms.ToTensor()(plt.imread(buf))
+    plt.close(fig)
+    return image
 
 
 def main():
@@ -309,6 +347,16 @@ def main():
                 # Log the best loss
                 logger.info(f"Best validation loss: {best_loss:.5f}. Saving model...")
 
+                if not cfg.BASE:
+                    # Log attention weights of the best model
+                    att = results_train["att"].detach().cpu().numpy()
+                    att_mean = np.mean(att, axis=1)
+                    for sample_num in range(att_mean.shape[0]):
+                        attention_image = plot_attention_heatmap(
+                            att_mean[sample_num], title=f"Avg MHA (Sample {sample_num})"
+                        )
+                        writer.add_image(f"Attention/Sample {sample_num}", attention_image, global_step=epoch)
+
                 # Save model
                 if not os.path.exists(cfg.MODELS_DIR):
                     os.makedirs(cfg.MODELS_DIR)
@@ -384,9 +432,16 @@ def evaluate():
             logger.info(f"First 5 batch positions of conformer 0: \n {batch.pos[:5, 0, :]}")
             logger.info(f"Batch targets: {batch.y}")
 
+    # Log evaluation results to TensorBoard
+    sub_dir = "debug" if cfg.DEBUG else "final"
+    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder(evaluation=True)
+    log_dir = os.path.join("runs", "evaluation", sub_dir, run_name)
+    writer = SummaryWriter(log_dir=log_dir)
+
     # Evaluate the model
     predictions = {}
     targets = {}
+    attention_weights = {}
     keys = {"pIC50 (SARS-CoV-2 Mpro)", "pIC50 (MERS-CoV Mpro)"}
 
     for num, key in enumerate(keys):
@@ -399,7 +454,10 @@ def evaluate():
             if cfg.BASE:
                 pred = model(batch)
             else:
-                pred = model(batch)["pred"]
+                out = model(batch)
+                pred = out["pred"]
+                att = out["att"].detach().cpu().numpy()
+                attention_weights[key] = att
 
             if cfg.DEBUG:
                 logger.info(f"Batch targets: {batch.y}")
@@ -413,15 +471,20 @@ def evaluate():
             predictions[key].extend(pred)
             targets[key].extend(y)
 
+    # Produce attention weight heatmaps
+    if not cfg.BASE:
+        for key in attention_weights.keys():
+            att = attention_weights[key]
+            att_head_mean = np.mean(att, axis=1)
+            att_mean = np.mean(att_head_mean, axis=1)
+
+            # Log attention weights to TensorBoard
+            attention_image = plot_attention_heatmap(att_mean, title=f"Avg. MHA: {key}")
+            writer.add_image(f"Attention: {key}", attention_image, global_step=0)
+
     # Run evaluation script (NaNs are taken into account inside the function)
     logger.info("Running evaluation script...")
     evaluation_results = dict(eval_potency(predictions, targets))
-
-    # Log evaluation results to TensorBoard
-    sub_dir = "debug" if cfg.DEBUG else "final"
-    run_name = cfg.RUN_NAME if cfg.RUN_NAME else get_next_run_folder(evaluation=True)
-    log_dir = os.path.join("runs", "evaluation", sub_dir, run_name)
-    writer = SummaryWriter(log_dir=log_dir)
 
     # Helper function to create a Markdown table
     def create_markdown_table(results_dict):
@@ -448,7 +511,7 @@ def evaluate():
 
 if __name__ == "__main__":
     # Train the model
-    main()
+    # main()
 
     # Evaluate the model
     evaluate()
