@@ -1,5 +1,8 @@
 import os
 import logging
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import io
 import numpy as np
@@ -48,9 +51,9 @@ def train(model, loader, optimizer, criterion, device, current_batch, warmup_bat
 
         # Adjust learning rate during warm-up
         if current_batch <= warmup_batches:
-            lr = cfg.LEARNING_RATE * (current_batch / warmup_batches)
             for param_group in optimizer.param_groups:
-                param_group["lr"] = lr
+                original_lr = param_group["initial_lr"]
+                param_group["lr"] = original_lr * (current_batch / warmup_batches)
 
         # Log the learning rate
         current_batch += 1
@@ -244,27 +247,52 @@ def main():
 
     # Define loss function and optimizer
     criterion = MSELoss()
-    optimizer = Adam(model.parameters(), lr=cfg.LEARNING_RATE, weight_decay=cfg.WEIGHT_DECAY)
+    optim_params = [
+        {
+            "params": model.feature_embedder.parameters(),
+            "lr": cfg.EMBEDDER_LEARNING_RATE,
+            "initial_lr": cfg.EMBEDDER_LEARNING_RATE,
+            "name": "feature_embedder",
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if not n.startswith("feature_embedder")],
+            "lr": cfg.LEARNING_RATE,
+            "initial_lr": cfg.LEARNING_RATE,
+            "name": "other_parameters",
+        },
+    ]
+    optimizer = Adam(optim_params, weight_decay=cfg.WEIGHT_DECAY)
 
     # Initialize LinearLR scheduler
-    def lr_lambda(epoch):
-        # Ratio of final LR to initial LR
-        ratio = cfg.FINAL_LEARNING_RATE / cfg.LEARNING_RATE
+    def lr_lambda_embedder(epoch):
+        ratio_embedder = cfg.FINAL_EMBEDDER_LEARNING_RATE / cfg.EMBEDDER_LEARNING_RATE
         anneal_epochs = (
             cfg.ANNEALING_STEPS
             if not cfg.WARMUP_BATCHES
             else cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES
         )
-
         if epoch < anneal_epochs:
             fraction = epoch / cfg.ANNEALING_STEPS
-            if fraction > 1.0:
-                fraction = 1.0
-            return (1.0 - fraction) + fraction * ratio
+            fraction = 1.0 if fraction > 1.0 else fraction
+            return (1.0 - fraction) + fraction * ratio_embedder
         else:
-            return ratio
+            return ratio_embedder
 
-    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
+    def lr_lambda_others(epoch):
+        ratio_others = cfg.FINAL_LEARNING_RATE / cfg.LEARNING_RATE
+        anneal_epochs = (
+            cfg.ANNEALING_STEPS
+            if not cfg.WARMUP_BATCHES
+            else cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES
+        )
+        if epoch < anneal_epochs:
+            fraction = epoch / cfg.ANNEALING_STEPS
+            fraction = 1.0 if fraction > 1.0 else fraction
+            return (1.0 - fraction) + fraction * ratio_others
+        else:
+            return ratio_others
+
+    scheduler = LambdaLR(optimizer, lr_lambda=[lr_lambda_embedder, lr_lambda_others])
 
     # Initialize TensorBoard writer
     sub_dir = "debug" if cfg.DEBUG else "train"
@@ -311,8 +339,12 @@ def main():
         writer.add_scalar("Train Loss", results_train["loss"], epoch)
         not cfg.DEBUG and writer.add_scalar("Val Loss", results_val["loss"], epoch)
 
-        # Log learning rate
-        writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
+        # Log learning rates
+        for param_group in optimizer.param_groups:
+            if param_group["name"] == "feature_embedder":
+                writer.add_scalar("Learning Rate/Feature Embedder", param_group["lr"], epoch)
+            else:
+                writer.add_scalar("Learning Rate/Other Parameters", param_group["lr"], epoch)
 
         # Log gradients
         for name, param in model.named_parameters():
@@ -511,7 +543,7 @@ def evaluate():
 
 if __name__ == "__main__":
     # Train the model
-    # main()
+    main()
 
     # Evaluate the model
     evaluate()

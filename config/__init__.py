@@ -7,15 +7,17 @@ from torch_geometric.nn.pool import global_add_pool, global_mean_pool
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_EPOCHS = 50
+EMBEDDER_LEARNING_RATE = 5e-5
+FINAL_EMBEDDER_LEARNING_RATE = 1e-5
 LEARNING_RATE = 1e-3
 ANNEALING_STEPS = 25
 FINAL_LEARNING_RATE = 1e-4
 MAX_EARLY_STOP = 10
 WEIGHT_DECAY = 1e-5
-WARMUP_BATCHES = 0
-RUN_NAME = "MOL_PRED_WITH_ATT_EMB_DIM_32_BS_4_NM_ALL_NC_5_LR_1e-3_1e-4_AS_25"
-GRADIENT_CLIP = 5.0
-MODEL_NAME = "mol_predictor_att_out"
+WARMUP_BATCHES = 500
+RUN_NAME = "MOL_PRED_WITH_ATT_EMB_DIM_32_BS_4_LRO_1e-3_1e-4_LRE_5e-5_1e-5"
+GRADIENT_CLIP = 1.0
+MODEL_NAME = "mol_predictor_att_diff_lrs"
 
 #### DEBUGGING CONFIG ####
 NUM_MOLECULES = 4
@@ -32,7 +34,7 @@ NUM_THREADS = 8
 
 # DATA LOADING
 BATCH_SIZE = 4
-NUM_WORKERS = multiprocessing.cpu_count() - 1
+NUM_WORKERS = multiprocessing.cpu_count() // 2
 
 # FEATURES
 NUM_POSSIBLE_ATOMS = 44  # Do not change, since it's the number of possible atoms given by Graphium
