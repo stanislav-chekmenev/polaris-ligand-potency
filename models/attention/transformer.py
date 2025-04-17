@@ -22,11 +22,16 @@ class TransformerBlock(torch.nn.Module):
         self.act = torch.nn.SiLU()
         self.dropout = torch.nn.Dropout(0.5)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_att=True) -> torch.Tensor:
         x_skip = x
-        x = self.attention(x)
+        if return_att:
+            out = self.attention(x, return_att=return_att)
+            x = out["x"]
+            att = out["att"]
+        else:
+            x = self.attention(x, return_att=return_att)
         x = self.layernorm(x)
         x = self.act(x)
         x = self.dropout(x)
         x = x + x_skip
-        return x
+        return {"x": x, "att": att} if return_att else {"x": x, "att": None}

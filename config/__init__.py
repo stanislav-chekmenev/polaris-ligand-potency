@@ -14,10 +14,10 @@ ANNEALING_STEPS = 25
 FINAL_LEARNING_RATE = 1e-4
 MAX_EARLY_STOP = 10
 WEIGHT_DECAY = 1e-5
-WARMUP_BATCHES = 0
-RUN_NAME = "MOL_PRED_EMB_DIM_32_BS_4_LRO_1e-3_1e-4_LRE_5e-5_1e-5"
-GRADIENT_CLIP = 5.0
-MODEL_NAME = "mol_predictor_diff_lrs"
+WARMUP_BATCHES = 500
+RUN_NAME = "MOL_PRED_WITH_ATT_EMB_DIM_32_BS_4_LRO_1e-3_1e-4_LRE_5e-5_1e-5"
+GRADIENT_CLIP = 1.0
+MODEL_NAME = "mol_predictor_att_diff_lrs"
 
 #### DEBUGGING CONFIG ####
 NUM_MOLECULES = 4
@@ -34,7 +34,7 @@ NUM_THREADS = 8
 
 # DATA LOADING
 BATCH_SIZE = 4
-NUM_WORKERS = multiprocessing.cpu_count() - 1
+NUM_WORKERS = multiprocessing.cpu_count() // 2
 
 # FEATURES
 NUM_POSSIBLE_ATOMS = 44  # Do not change, since it's the number of possible atoms given by Graphium

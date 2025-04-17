@@ -33,7 +33,7 @@ class SelfAttention(torch.nn.Module):
         self.head_dim = input_dim // num_heads
         self.num_mol_embeddings = num_mol_embeddings
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_att=True) -> torch.Tensor:
         # Create an interim shape for processing the data by each head in parallel
         input_shape = x.shape
         batch_size = input_shape[0]
@@ -73,4 +73,4 @@ class SelfAttention(torch.nn.Module):
         # Apply the output projection
         output = self.out_proj(output)
 
-        return output
+        return {"x": output, "att": weight} if return_att else {"x": output, "att": None}
