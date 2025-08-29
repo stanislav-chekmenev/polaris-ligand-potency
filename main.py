@@ -41,7 +41,6 @@ def train(model, loader, optimizer, criterion, device, current_batch, warmup_bat
                 original_lr = param_group["initial_lr"]
                 param_group["lr"] = original_lr * (current_batch / warmup_batches)
 
-        # Log the learning rate
         current_batch += 1
 
         # Forward pass
@@ -187,9 +186,8 @@ def main():
     ]
     optimizer = Adam(optim_params, weight_decay=cfg.WEIGHT_DECAY)
 
-    # Initialize LinearLR scheduler
-    def lr_lambda_embedder(epoch):
-        ratio_embedder = cfg.FINAL_EMBEDDER_LEARNING_RATE / cfg.EMBEDDER_LEARNING_RATE
+    # Setup LR scheduler
+    def _lr_schedule(epoch, ratio):
         anneal_epochs = (
             cfg.ANNEALING_STEPS
             if not cfg.WARMUP_BATCHES
@@ -198,23 +196,16 @@ def main():
         if epoch < anneal_epochs:
             fraction = epoch / cfg.ANNEALING_STEPS
             fraction = 1.0 if fraction > 1.0 else fraction
-            return (1.0 - fraction) + fraction * ratio_embedder
+            return (1.0 - fraction) + fraction * ratio
         else:
-            return ratio_embedder
+            return ratio
 
-    def lr_lambda_others(epoch):
-        ratio_others = cfg.FINAL_LEARNING_RATE / cfg.LEARNING_RATE
-        anneal_epochs = (
-            cfg.ANNEALING_STEPS
-            if not cfg.WARMUP_BATCHES
-            else cfg.ANNEALING_STEPS + len(train_loader) // cfg.WARMUP_BATCHES
-        )
-        if epoch < anneal_epochs:
-            fraction = epoch / cfg.ANNEALING_STEPS
-            fraction = 1.0 if fraction > 1.0 else fraction
-            return (1.0 - fraction) + fraction * ratio_others
-        else:
-            return ratio_others
+    def make_lr_lambda(base, final):
+        ratio = final / base
+        return lambda epoch: _lr_schedule(epoch, ratio)
+
+    lr_lambda_embedder = make_lr_lambda(cfg.EMBEDDER_LEARNING_RATE, cfg.FINAL_EMBEDDER_LEARNING_RATE)
+    lr_lambda_others = make_lr_lambda(cfg.LEARNING_RATE, cfg.FINAL_LEARNING_RATE)
 
     scheduler = LambdaLR(optimizer, lr_lambda=[lr_lambda_embedder, lr_lambda_others])
 
@@ -229,7 +220,7 @@ def main():
     config_data = {k: str(v) for k, v in cfg.__dict__.items() if k.isupper()}
     writer.add_hparams(config_data, {"placeholder": 0})
 
-    # Warm-up configuration
+    # Start the training loop
     warmup_batches = cfg.WARMUP_BATCHES
     current_batch = 1
     warmup_done = False
@@ -250,7 +241,6 @@ def main():
         if warmup_done:
             scheduler.step()
 
-        # Warmup done?
         if not warmup_done and current_batch > warmup_batches:
             logger.info(f"Warmup finished.")
             warmup_done = True

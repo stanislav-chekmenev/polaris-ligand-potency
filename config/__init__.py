@@ -2,7 +2,7 @@ import torch
 import multiprocessing
 
 from pathlib import Path
-from torch_geometric.nn.pool import global_add_pool, global_mean_pool
+from torch_geometric.nn.pool import global_mean_pool
 
 #### TRAINING CONFIG ####
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
